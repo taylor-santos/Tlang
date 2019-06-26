@@ -42,9 +42,9 @@ void yyerror(YYLTYPE *locp,
 }
 <COMMENT>{
     "*/"    { BEGIN(INITIAL); }
-    [^*\n]+ { /* Do nothing */ }
-    "*"     { /* Do nothing */ }
-    \n      { /* Do nothing */ }
+    [^*\n]+
+    "*"
+    \n
     <<EOF>> {
         yyerror(yylloc, filename, NULL, "error: unterminated comment");
         return 0;
@@ -54,6 +54,21 @@ void yyerror(YYLTYPE *locp,
 [0-9]+ {
     yylval->int_val = atoi(yytext);
     return INT_LIT;
+}
+[0-9]+"."[0-9]+ {
+    yylval->double_val = atof(yytext);
+    return DOUBLE_LIT;
+}
+[a-zA-Z_][a-zA-Z0-9_]* {
+    yylval->str_val = strdup(yytext);
+    return IDENT;
+}
+
+[ \t]+
+"\n"
+
+. {
+    return *yytext;
 }
 
 %%

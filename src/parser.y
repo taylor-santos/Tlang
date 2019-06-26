@@ -11,7 +11,6 @@
                  const char *filename,
                  yyscan_t scanner,
                  const char *msg);
-    int yywrap();
 %}
 
 %code provides {
@@ -50,6 +49,21 @@
 
 file:
     %empty
+  | stmts
+
+stmts:
+    statement
+  | stmts statement
+
+statement:
+    IDENT '=' expr ';'
+
+expr:
+    IDENT
+  | INT_LIT
+  | DOUBLE_LIT
+  | STR_LIT
+  | CHAR_LIT
 
 %%
 

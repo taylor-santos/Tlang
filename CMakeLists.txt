@@ -17,7 +17,7 @@ flex_target(
 add_flex_bison_dependency(Scanner Parser)
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR} include)
-add_executable(Tlang
+add_executable(tcc
         ${BISON_Parser_OUTPUTS}
         ${FLEX_Scanner_OUTPUTS}
         src/main.c
