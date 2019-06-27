@@ -88,6 +88,7 @@ int main(int argc, char *argv[]) {
         yylex_destroy(scanner);
         fclose(inputs[i]);
     }
+    free(inputs);
     if (status) {
         exit(EXIT_FAILURE);
     }

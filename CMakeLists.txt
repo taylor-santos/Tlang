@@ -21,4 +21,5 @@ add_executable(tcc
         ${BISON_Parser_OUTPUTS}
         ${FLEX_Scanner_OUTPUTS}
         src/main.c
+        src/stack.c
 )

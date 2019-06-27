@@ -1,7 +1,10 @@
 %{
 #include <stdio.h>
 #include <stdlib.h>
+#include "stack.h"
 #include "Tlang_parser.h"
+
+const Stack *indent;
 
 #define YY_USER_ACTION \
     yylloc->first_line = yylloc->last_line; \
@@ -14,7 +17,10 @@
             yylloc->last_column++; \
         } \
     }
-
+#define YY_USER_INIT { \
+    indent = new_Stack(1); \
+    indent->push(indent, 0); \
+}
 YY_DECL;
 
 void yyerror(YYLTYPE *locp,
