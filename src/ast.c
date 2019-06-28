@@ -20,11 +20,17 @@ void free_leaf(const void *this) {
     free((void*)node);
 }
 
-void json_leaf(UNUSED const void *this, int indent, FILE *out) {
+void json_leaf(const void *this, int indent, FILE *out) {
     fprintf(out, "{\n");
     indent++;
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
-    fprintf(out, "\"type\": \"Leaf Node\"");
+    fprintf(out, "\"type\": \"Leaf Node\",\n");
+    fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
+    const ASTNode *node = this;
+    ASTNodeData *data = node->data;
+    fprintf(out, "\"loc\": \"%d:%d-%d:%d\"", data->loc->first_line, 
+            data->loc->first_column, data->loc->last_line,
+        data->loc->last_column);
     fprintf(out, "\n");
     indent--;
     fprintf(out, "%*s}", indent * JSON_TAB_WIDTH, "");
@@ -100,9 +106,13 @@ void json_program(const void *this, int indent, FILE *out) {
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
     fprintf(out, "\"type\": \"Program\",\n");
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
-    fprintf(out, "\"statements\": ");
     const ASTNode *node = this;
     ASTProgramData *data = node->data;
+    fprintf(out, "\"loc\": \"%d:%d-%d:%d\",\n", data->loc->first_line, 
+            data->loc->first_column, data->loc->last_line,
+            data->loc->last_column);
+    fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
+    fprintf(out, "\"statements\": ");
     json_vector(data->statements, indent, out);
     fprintf(out, "\n");
     indent--;
