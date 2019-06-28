@@ -94,3 +94,4 @@ const Stack *new_Stack(int capacity) {
     stack->free = stack_free;
     return stack;
 }
+

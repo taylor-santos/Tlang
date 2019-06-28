@@ -85,11 +85,12 @@ int main(int argc, char *argv[]) {
         const ASTNode *root;
         if (yyparse(&root, argv[optind + i], scanner)) {
             status = 1;
-        }
-        ASTNodeVTable *vtable = root->vtable;
-        vtable->json(root, 0, stdout);
-        fprintf(stdout, "\n");
-        vtable->free(root);
+        } else {
+            ASTNodeVTable *vtable = root->vtable;
+		    vtable->json(root, 0, stdout);
+		    fprintf(stdout, "\n");
+		    vtable->free(root);
+	    }
         yy_delete_buffer(state, scanner);
         yylex_destroy(scanner);
         fclose(inputs[i]);
