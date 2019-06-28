@@ -1,52 +1,52 @@
 #include "stack.h"
 #include <stdlib.h>
-#include <stdio.h>
 
 struct stack_data {
-    void **values;
+    const void **values;
     int capacity;
     int cap_diff;
     int size;
 };
 
-static int stack_push(const Stack *this, void *element) {
+static int stack_push(const Stack *this, const void *val) {
     struct stack_data *data = this->data;
     if (data->size == data->capacity) {
         size_t new_cap = data->capacity + data->cap_diff;
-        void **new_values = realloc(data->values, new_cap * sizeof(void*));
+        const void **new_values =
+            realloc(data->values, new_cap * sizeof(const void*));
         if (new_values == NULL) {
             return 1;
         }
         data->values = new_values;
         data->capacity = new_cap;
     }
-    data->values[data->size++] = element;
+    data->values[data->size++] = val;
     return 0;
 }
 
-static int stack_pop(const Stack *this, void **element_ptr) {
+static int stack_pop(const Stack *this, const void *val_ptr) {
     struct stack_data *data = this->data;
-    if (element_ptr == NULL) {
+    if (val_ptr == NULL) {
         return 1;
     }
     if (data->size <= 0) {
-        *element_ptr = NULL;
+        *(const void**)val_ptr = NULL;
         return 1;
     }
-    *element_ptr = data->values[--data->size];
+    *(const void**)val_ptr = data->values[--data->size];
     return 0;
 }
 
-static int stack_top(const Stack *this, void **element_ptr) {
+static int stack_top(const Stack *this, const void *val_ptr) {
     struct stack_data *data = this->data;
-    if (element_ptr == NULL) {
+    if (val_ptr == NULL) {
         return 1;
     }
     if (data->size <= 0) {
-        *element_ptr = NULL;
+        *(const void**)val_ptr = NULL;
         return 1;
     }
-    *element_ptr = data->values[data->size - 1];
+    *(const void**)val_ptr = data->values[data->size - 1];
     return 0;
 }
 
@@ -55,11 +55,11 @@ static int stack_size(const Stack *this) {
     return data->size;
 }
 
-static void stack_free(const Stack *this, void (*data_free)(void*)) {
+static void stack_free(const Stack *this, void (*val_free)(const void*)) {
     struct stack_data *data = this->data;
-    if (data_free != NULL) {
+    if (val_free != NULL) {
         for (int i = 0; i < data->size; i++) {
-            data_free(data->values[i]);
+            val_free(data->values[i]);
         }
     }
     free(data->values);
@@ -67,14 +67,14 @@ static void stack_free(const Stack *this, void (*data_free)(void*)) {
     free((void*)this);
 }
 
-const Stack *new_Stack(int cap) {
+const Stack *new_Stack(int capacity) {
     struct stack_data *data = malloc(sizeof(*data));
     if (data == NULL) {
         return NULL;
     }
-    int capacity = cap > 0 ? cap : DEFAULT_CAPACITY;
-    data->capacity = data->cap_diff = capacity;
-    data->values = malloc(capacity * sizeof(void*));
+    int cap = capacity > 0 ? capacity : DEFAULT_CAPACITY;
+    data->capacity = data->cap_diff = cap;
+    data->values = malloc(cap * sizeof(const void*));
     if (data->values == NULL) {
         free(data);
         return NULL;
