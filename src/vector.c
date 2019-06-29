@@ -102,7 +102,7 @@ const Vector *new_Vector(int capacity) {
     if (data == NULL) {
         return NULL;
     }
-    int cap = capacity > 0 ? capacity : DEFAULT_CAPACITY;
+    int cap = capacity > 0 ? capacity : VECTOR_CAPACITY;
     data->capacity = data->cap_diff = cap;
     data->values = malloc(cap * sizeof(const void*));
     if (data->values == NULL) {

@@ -6,6 +6,9 @@
     #include "Tlang_scanner.h"
 
     #define YYERROR_VERBOSE
+    #define RED     "\033[0;91m"
+    #define WHITE   "\033[0m"
+    #define ERROR   RED "error: " WHITE
 
     void yyerror(YYLTYPE *locp,
                  const ASTNode **root,
@@ -45,9 +48,10 @@
     Vector  const *vec;
 }
 
+%token             INDENT OUTDENT ERROR NEWLINE
 %token<int_val>    INT_LIT
 %token<double_val> DOUBLE_LIT
-%token<str_val>    IDENT STR_LIT CHAR_LIT
+%token<str_val>    IDENT
 
 %type<ast> file statement
 %type<vec> stmts
@@ -79,7 +83,7 @@ stmts:
         }
 
 statement:
-    IDENT '=' expr ';'
+    IDENT '=' expr NEWLINE
         {
             $$ = new_LeafNode(&@$);
             free($1);
@@ -102,7 +106,7 @@ void yyerror(YYLTYPE *locp,
     const char *msg
 ) {
     fprintf(stderr,
-        "%s:%d:%d: %s\n",
+        "%s:%d:%d: " ERROR "%s\n",
         filename,
         locp->first_line,
         locp->first_column,
