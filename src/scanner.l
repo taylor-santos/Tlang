@@ -150,9 +150,9 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
     }
 %}
 
-"//".*  // Ignore comments
-^[ \t]+([/]{2}.+)?[\n\r]+ // Ignore empty lines or lines with just comments
-
+[/]{2}.*                // Ignore comments
+^[ \t]+[\n\r]+          // Ignore empty lines
+^[ \t]+[/]{2}.+[\n\r]+  // Ignore lines with just comments
 [\\][ \t]*[\n\r]+[ \t]* // Ignore escaped newlines
 
 [0-9]+ {
@@ -203,7 +203,7 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
     }
 }
 
-[ \t]+ //Ignore non-leading whitespace
+[ \t]+                  // Ignore non-leading whitespace
 
 . {
     push_token((Token){.type=*yytext});
