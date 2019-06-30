@@ -135,8 +135,6 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type) {
 %option yylineno
 %option noyywrap
 
-%x COMMENT
-
 %%
 
 %{
@@ -146,20 +144,10 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type) {
     }
 %}
 
-"//".*
-"/*" {
-    BEGIN(COMMENT);
-}
-<COMMENT>{
-    "*/"    { BEGIN(INITIAL); }
-    [^*\n]+
-    "*"
-    \n
-    <<EOF>> {
-        yyerror(yylloc, NULL, filename, NULL, "error: unterminated comment");
-        push_token((Token){.type=ERROR});
-    }
-}
+"//".*  // Ignore comments
+^[ \t]+([/]{2}.+)?[\n\r]+ // Ignore empty lines or lines with just comments
+
+[\\][ \t]*[\n\r]+[ \t]* // Ignore escaped newlines
 
 [0-9]+ {
     push_token((Token){.type=INT_LIT,    .value.int_val=atoi(yytext)});
@@ -170,6 +158,8 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type) {
 [a-zA-Z_][a-zA-Z0-9_]* {
     push_token((Token){.type=IDENT,      .value.str_val=strdup(yytext)});
 }
+
+
 
 "\n" {
     push_token((Token){.type=NEWLINE});
