@@ -53,7 +53,7 @@
 %token<double_val> DOUBLE_LIT
 %token<str_val>    IDENT
 
-%type<ast> file statement
+%type<ast> file statement assignment lvalue expr
 %type<vec> stmts
 
 %start file
@@ -83,19 +83,40 @@ stmts:
         }
 
 statement:
-    IDENT '=' expr NEWLINE
+    assignment NEWLINE
         {
-            $$ = new_LeafNode(&@$);
-            free($1);
+            $$ = $1;
+        }
+
+assignment:
+    expr
+        {
+            $$ = $1;
+        }
+  | lvalue '=' assignment
+        {
+            $$ = new_AssignmentNode(&@$, $1, $3);
+        }
+
+lvalue:
+    IDENT
+        {
+            $$ = new_VariableNode(&@$, $1);
         }
 
 expr:
-    IDENT
+    lvalue
         {
-            free($1);
+            $$ = $1;
         }
   | INT_LIT
+        {
+            $$ = new_IntNode(&@$, $1);
+        };
   | DOUBLE_LIT
+        {
+            $$ = new_LeafNode(&@$);
+        };
 
 %%
 

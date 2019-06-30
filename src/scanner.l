@@ -7,15 +7,18 @@
 
 const Stack *indent_stack;
 const Queue *tok_queue;
+YYLTYPE save_loc = { 1, 1, 1, 1 };
 int indent = 0;
 enum { NOT_SET, SPACES, TABS } indent_type = NOT_SET;
 
 typedef struct token {
     enum yytokentype type;
     union YYSTYPE value;
+    YYLTYPE loc;
 } Token;
 
 #define YY_USER_ACTION \
+    *yylloc = save_loc; \
     yylloc->first_line = yylloc->last_line; \
     yylloc->first_column = yylloc->last_column; \
     for (int i = 0; yytext[i] != '\0'; i++) { \
@@ -25,7 +28,8 @@ typedef struct token {
         } else { \
             yylloc->last_column++; \
         } \
-    }
+    } \
+    save_loc = *yylloc;
 #define YY_USER_INIT { \
     tok_queue    = new_Queue(0); \
     indent_stack = new_Stack(0); \
@@ -60,6 +64,7 @@ void yyerror(YYLTYPE *locp,
 void push_token(Token t) {
     Token *new_t = malloc(sizeof(*new_t));
     memcpy(new_t, &t, sizeof(*new_t));
+    new_t->loc = save_loc;
     safe_call(tok_queue, push, new_t);
 }
 
@@ -79,7 +84,7 @@ int handle_indentation(int indent_len) {
         while (indent_stack->size(indent_stack) && *top_indent > indent_len) {
             safe_call(indent_stack, pop, &top_indent);
             free(top_indent);
-            push_token((Token){.type=OUTDENT});
+            push_token((Token){ .type=OUTDENT });
             safe_call(indent_stack, top, &top_indent);
         }
         if (*top_indent < indent_len) {
@@ -89,12 +94,13 @@ int handle_indentation(int indent_len) {
     return 0;
 }
 
-int pop_token_queue(YYSTYPE *lval, enum yytokentype *type) {
+int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
     if (tok_queue->size(tok_queue) != 0) {
         Token *t;
         safe_call(tok_queue, pop, &t);
         *type = t->type;
         *lval = t->value;
+        *loc  = t->loc;
         free(t);
         switch(*type) {
             case NEWLINE:
@@ -116,7 +122,7 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type) {
                 printf("DOUBLE_LIT (%f)\n", lval->double_val);
                 break;
             case IDENT:
-                printf("IDENT     (%s)\n", lval->str_val);
+                printf("IDENT      (%s)\n", lval->str_val);
                 break;
             default:
                 printf("LITERAL    (%c)\n", *type);
@@ -139,7 +145,7 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type) {
 
 %{
     enum yytokentype type;
-    if (pop_token_queue(yylval, &type)) {
+    if (pop_token_queue(yylval, &type, yylloc)) {
         return type;
     }
 %}
@@ -159,13 +165,11 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type) {
     push_token((Token){.type=IDENT,      .value.str_val=strdup(yytext)});
 }
 
-
-
 "\n" {
     push_token((Token){.type=NEWLINE});
     indent = 0;
     enum yytokentype type;
-    if (pop_token_queue(yylval, &type)) {
+    if (pop_token_queue(yylval, &type, yylloc)) {
         return type;
     }
 }
@@ -213,7 +217,7 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type) {
         push_token((Token){.type=OUTDENT});
     }
     enum yytokentype type;
-    if (pop_token_queue(yylval, &type)) {
+    if (pop_token_queue(yylval, &type, yylloc)) {
         return type;
     }
     if (tok_queue->size(tok_queue)) {
