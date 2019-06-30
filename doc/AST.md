@@ -1,1 +1,1 @@
-![AST Hierarchy](doc/ASTHierarchy.png)
+![AST Hierarchy](ASTHierarchy.png)
