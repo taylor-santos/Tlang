@@ -22,6 +22,7 @@ add_executable(tcc
         ${FLEX_Scanner_OUTPUTS}
         src/main.c
         src/stack.c
+        src/queue.c
         src/vector.c
         src/ast.c
 )

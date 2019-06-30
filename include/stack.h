@@ -1,7 +1,7 @@
 #ifndef STACK_H
 #define STACK_H
 
-#define DEFAULT_CAPACITY 16
+#define STACK_CAPACITY 16
 
 typedef struct stack Stack;
 

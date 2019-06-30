@@ -1,7 +1,7 @@
 #ifndef VECTOR_H
 #define VECTOR_H
 
-#define DEFAULT_CAPACITY 16
+#define VECTOR_CAPACITY 16
 
 typedef struct vector Vector;
 
