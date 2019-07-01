@@ -24,5 +24,6 @@ add_executable(tcc
         src/stack.c
         src/queue.c
         src/vector.c
+        src/map.c
         src/ast.c
 )
