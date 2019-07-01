@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.14)
 project(Tlang C)
 
-set(CMAKE_C_STANDARD 99)
+set(CMAKE_C_STANDARD 11)
 SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -pedantic -Wextra")
 
 find_package(BISON)
@@ -26,4 +26,5 @@ add_executable(tcc
         src/vector.c
         src/map.c
         src/ast.c
+        src/typechecker.c
 )

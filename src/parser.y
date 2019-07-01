@@ -103,6 +103,10 @@ lvalue:
         {
             $$ = new_VariableNode(&@$, $1);
         }
+  | IDENT ':' IDENT
+        {
+            $$ = new_TypedVarNode(&@$, $1, $3);
+        }
 
 expr:
     lvalue

@@ -82,15 +82,17 @@ int main(int argc, char *argv[]) {
         }
         state = yy_create_buffer(inputs[i], YY_BUF_SIZE, scanner);
         yy_switch_to_buffer(state, scanner);
-        const ASTNode *root;
-        if (yyparse(&root, argv[optind + i], scanner)) {
+        const ASTNode *AST = NULL;
+        if (yyparse(&AST, argv[optind + i], scanner)) {
             status = 1;
         } else {
-            ASTNodeVTable *vtable = root->vtable;
-		    vtable->json(root, 0, stdout);
+            ASTProgramVTable *vtable = AST->vtable;
+            vtable->type_check(AST);
+		    vtable->json(AST, 0, stdout);
 		    fprintf(stdout, "\n");
-		    vtable->free(root);
+		    vtable->free(AST);
 	    }
+
         yy_delete_buffer(state, scanner);
         yylex_destroy(scanner);
         fclose(inputs[i]);

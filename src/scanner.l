@@ -51,7 +51,8 @@ typedef struct token {
                 __LINE__); \
         exit(EXIT_FAILURE); \
     } \
-}
+} \
+void safe_call()
 
 YY_DECL;
 
@@ -151,7 +152,7 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
 %}
 
 [/]{2}.*                // Ignore comments
-^[ \t]+[\n\r]+          // Ignore empty lines
+^[ \t]*[\n\r]+          // Ignore empty lines
 ^[ \t]+[/]{2}.+[\n\r]+  // Ignore lines with just comments
 [\\][ \t]*[\n\r]+[ \t]* // Ignore escaped newlines
 

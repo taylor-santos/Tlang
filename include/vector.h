@@ -6,15 +6,15 @@
 typedef struct vector Vector;
 
 struct vector {
-    void   *data;
-    int    (*append)(const Vector *this, const void *val);
-    int    (*get)   (const Vector *this, int index, const void *val_ptr);
-    int    (*put)   (const Vector *this, int index, const void *val,
-                     const void *prev_ptr);
-    int    (*remove)(const Vector *this, int index, const void *prev_ptr);
-    int    (*size)  (const Vector *this);
-    void **(*array) (const Vector *this, int *size);
-    void   (*free)  (const Vector *this, void(*free_val)(const void*));
+    void  *data;
+    int   (*append)(const Vector *this, const void *val);
+    int   (*get)   (const Vector *this, int index, const void *val_ptr);
+    int   (*put)   (const Vector *this, int index, const void *val,
+                    const void *prev_ptr);
+    int   (*remove)(const Vector *this, int index, const void *prev_ptr);
+    int   (*size)  (const Vector *this);
+    int   (*array) (const Vector *this, int *size, const void *array_ptr);
+    void  (*free)  (const Vector *this, void(*free_val)(const void*));
 
 };
 

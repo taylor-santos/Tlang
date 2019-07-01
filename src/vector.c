@@ -71,18 +71,22 @@ static int vector_size(const Vector *this) {
     return data->size;
 }
 
-static void **vector_array(const Vector *this, int *size) {
+static int vector_array(const Vector *this, int *size, const void *array_ptr) {
     if (size == NULL) {
-        return NULL;
+        return 1;
+    }
+    if (array_ptr == NULL) {
+        return 1;
     }
     struct vector_data *data = this->data;
-    void **values = malloc(data->size * sizeof(const void*));
+    void *values = malloc(data->size * sizeof(const void*));
     if (values == NULL) {
-        return NULL;
+        return 1;
     }
     memcpy(values, data->values, data->size * sizeof(const void*));
     *size = data->size;
-    return values;
+    *(const void***)array_ptr = values; // dereference ptr to array of ptrs
+    return 0;
 }
 
 static void vector_free(const Vector *this, void (*free_val)(const void*)) {
