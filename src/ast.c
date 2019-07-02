@@ -403,6 +403,68 @@ const ASTNode *new_IntNode(struct YYLTYPE *loc, int val) {
     return node;
 }
 
+static void free_double(const void *this) {
+    const ASTNode *node = this;
+    ASTIntData *data = node->data;
+    free(data->loc);
+    free(node->data);
+    free(node->vtable);
+    free((void*)node);
+}
+
+static void json_double(const void *this, int indent, FILE *out) {
+    fprintf(out, "{\n");
+    indent++;
+    fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
+    fprintf(out, "\"type\": \"Double\",\n");
+    fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
+    const ASTNode *node = this;
+    ASTDoubleData *data = node->data;
+    fprintf(out, "\"loc\": \"%d:%d-%d:%d\",\n", data->loc->first_line,
+        data->loc->first_column, data->loc->last_line,
+        data->loc->last_column);
+    fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
+    fprintf(out, "\"value\": ");
+    fprintf(out, "\"%f\"\n", data->val);
+    indent--;
+    fprintf(out, "%*s}", indent * JSON_TAB_WIDTH, "");
+}
+
+const ASTNode *new_DoubleNode(struct YYLTYPE *loc, double val) {
+    ASTNode *node = malloc(sizeof(*node));
+    if (node == NULL) {
+        return NULL;
+    }
+    struct ast_double_data *data = malloc(sizeof(*data));
+    if (data == NULL) {
+        free(node);
+        return NULL;
+    }
+    node->data = data;
+    struct ast_double_vtable *vtable = malloc(sizeof(*vtable));
+    if (vtable == NULL) {
+        free(data);
+        free(node);
+        return NULL;
+    }
+    node->vtable = vtable;
+    data->loc = malloc(sizeof(*loc));
+    if (data->loc == NULL) {
+        free(vtable);
+        free(data);
+        free(node);
+        return NULL;
+    }
+    memcpy(data->loc, loc, sizeof(*loc));
+    data->val = val;
+    data->type = NULL;
+    vtable->free = free_double;
+    vtable->json = json_double;
+    vtable->get_type = GetType_Double;
+    vtable->assign_type = AssignType_Double;
+    return node;
+}
+
 static void json_vector(const Vector *vec, int indent, FILE *out) {
     char *sep = "\n";
     fprintf(out, "[");

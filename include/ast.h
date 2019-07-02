@@ -55,7 +55,7 @@ struct ast_statement_data {
 struct ast_statement_vtable {
     void     (*free)    (const void*);
     void     (*json)    (const void*, int, FILE*);
-    VarType *(*get_type)(const void*, const Map*);
+    VarType *(*get_type)(const void*, const Map*, int*);
 };
 
 
@@ -71,7 +71,7 @@ struct ast_assignment_data {
 struct ast_assignment_vtable {
     void     (*free)    (const void*);
     void     (*json)    (const void*, int, FILE*);
-    VarType *(*get_type)(const void*, const Map*);
+    VarType *(*get_type)(const void*, const Map*, int*);
 };
 const ASTNode *new_AssignmentNode(struct YYLTYPE *loc,
                                   const void *lhs,
@@ -88,7 +88,7 @@ struct ast_r_expr_data {
 struct ast_r_expr_vtable {
     void     (*free)    (const void*);
     void     (*json)    (const void*, int, FILE*);
-    VarType *(*get_type)(const void*, const Map*);
+    VarType *(*get_type)(const void*, const Map*, int*);
 };
 
 
@@ -102,7 +102,7 @@ struct ast_l_expr_data {
 struct ast_l_expr_vtable {
     void     (*free)       (const void*);
     void     (*json)       (const void*, int, FILE*);
-    VarType *(*get_type)   (const void*, const Map*);
+    VarType *(*get_type)   (const void*, const Map*, int*);
     int      (*assign_type)(const void*, VarType*, const Map*);
 };
 
@@ -112,13 +112,13 @@ typedef struct ast_variable_data   ASTVariableData;
 typedef struct ast_variable_vtable ASTVariableVTable;
 struct ast_variable_data {
     struct YYLTYPE *loc;
-    char           *name;
     VarType        *type;
+    char           *name;
 };
 struct ast_variable_vtable {
     void     (*free)       (const void*);
     void     (*json)       (const void*, int, FILE*);
-    VarType *(*get_type)   (const void*, const Map*);
+    VarType *(*get_type)   (const void*, const Map*, int*);
     int      (*assign_type)(const void*, VarType*, const Map*);
 };
 const ASTNode *new_VariableNode(struct YYLTYPE *loc, char *name);
@@ -129,14 +129,14 @@ typedef struct ast_typed_var_data   ASTTypedVarData;
 typedef struct ast_typed_var_vtable ASTTypedVarVTable;
 struct ast_typed_var_data {
     struct YYLTYPE *loc;
+    VarType        *type;
     char           *name;
     char           *given_type;
-    VarType        *type;
 };
 struct ast_typed_var_vtable {
     void     (*free)       (const void*);
     void     (*json)       (const void*, int, FILE*);
-    VarType *(*get_type)   (const void*, const Map*);
+    VarType *(*get_type)   (const void*, const Map*, int*);
     int      (*assign_type)(const void*, VarType*, const Map*);
 };
 const ASTNode *new_TypedVarNode(struct YYLTYPE *loc, char *name, char *type);
@@ -147,15 +147,31 @@ typedef struct ast_int_data   ASTIntData;
 typedef struct ast_int_vtable ASTIntVTable;
 struct ast_int_data {
     struct YYLTYPE *loc;
-    int            val;
     VarType        *type;
+    int            val;
 };
 struct ast_int_vtable {
     void     (*free)       (const void*);
     void     (*json)       (const void*, int, FILE*);
-    VarType *(*get_type)   (const void*, const Map*);
+    VarType *(*get_type)   (const void*, const Map*, int*);
     int      (*assign_type)(const void*, VarType*, const Map*);
 };
 const ASTNode *new_IntNode(struct YYLTYPE *loc, int val);
+
+/* Double Node < LExpr Node */
+typedef struct ast_double_data   ASTDoubleData;
+typedef struct ast_double_vtable ASTDoubleVTable;
+struct ast_double_data {
+    struct YYLTYPE *loc;
+    VarType        *type;
+    double         val;
+};
+struct ast_double_vtable {
+    void     (*free)       (const void*);
+    void     (*json)       (const void*, int, FILE*);
+    VarType *(*get_type)   (const void*, const Map*, int*);
+    int      (*assign_type)(const void*, VarType*, const Map*);
+};
+const ASTNode *new_DoubleNode(struct YYLTYPE *loc, double val);
 
 #endif//AST_H

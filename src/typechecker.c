@@ -67,33 +67,39 @@ int TypeCheck_Program(const void *this) {
     int size = 0;
     ASTNode **stmt_arr = NULL;
     safe_call(stmts, array, &size, &stmt_arr);
+    int errstate = 0;
     for (int i = 0; i < size; i++) {
         ASTStatementVTable *vtable = stmt_arr[i]->vtable;
-        vtable->get_type(stmt_arr[i], data->symbols);
+        vtable->get_type(stmt_arr[i], data->symbols, &errstate);
     }
-    return 0;
+    return errstate;
 }
 
-VarType *GetType_Assignment(const void *this, const Map *symbols) {
+VarType *GetType_Assignment(const void *this, const Map *symbols, int *err) {
     const ASTNode     *node = this;
     ASTAssignmentData *data = node->data;
     const ASTNode *lhs = data->lhs;
     const ASTNode *rhs = data->rhs;
     ASTLExprVTable      *lhs_vtable = lhs->vtable;
     ASTAssignmentVTable *rhs_vtable = rhs->vtable;
-    VarType *rhs_type = rhs_vtable->get_type(rhs, symbols);
+    VarType *rhs_type = rhs_vtable->get_type(rhs, symbols, err);
+    if (rhs_type == NULL) {
+        return NULL;
+    }
     if (rhs_type->init == 0) {
         //TODO: Handle use before init error
         fprintf(stderr, "error: use before init\n");
+        *err = 1;
     }
     if (lhs_vtable->assign_type(lhs, rhs_type, symbols)) {
         //TODO: Handle type reassignment error
-        fprintf(stderr, "error: type reassignment");
+        fprintf(stderr, "error: type reassignment\n");
+        *err = 1;
     }
     return rhs_type;
 }
 
-VarType *GetType_Variable(const void *this, const Map *symbols) {
+VarType *GetType_Variable(const void *this, const Map *symbols, int *err) {
     const ASTNode   *node = this;
     ASTVariableData *data = node->data;
     size_t len = strlen(data->name);
@@ -104,11 +110,12 @@ VarType *GetType_Variable(const void *this, const Map *symbols) {
     } else {
         //TODO: Handle use before init error
         fprintf(stderr, "error: use before init\n");
+        *err = 1;
         return NULL;
     }
 }
 
-VarType *GetType_TypedVar(const void *this, const Map *symbols) {
+VarType *GetType_TypedVar(const void *this, const Map *symbols, int *err) {
     const ASTNode   *node = this;
     ASTTypedVarData *data = node->data;
     size_t len = strlen(data->name);
@@ -120,6 +127,7 @@ VarType *GetType_TypedVar(const void *this, const Map *symbols) {
         VarType *type = NULL;
         if (new_VarType(data->given_type, &type)) {
             //TODO: Handle invalid given type error
+            *err = 1;
             return NULL;
         }
         safe_call(symbols, put, data->name, len, type, NULL);
@@ -127,10 +135,22 @@ VarType *GetType_TypedVar(const void *this, const Map *symbols) {
     }
 }
 
-VarType *GetType_Int(UNUSED const void *this, UNUSED const Map *symbols) {
+VarType *GetType_Int(UNUSED const void *this,
+                     UNUSED const Map *symbols,
+                     UNUSED int *err) {
     VarType *type = malloc(sizeof(*type));
     type->type = BUILTIN;
     type->builtin = INT;
+    type->init = 1;
+    return type;
+}
+
+VarType *GetType_Double(UNUSED const void *this,
+                        UNUSED const Map *symbols,
+                        UNUSED int *err) {
+    VarType *type = malloc(sizeof(*type));
+    type->type = BUILTIN;
+    type->builtin = DOUBLE;
     type->init = 1;
     return type;
 }
@@ -187,4 +207,8 @@ int AssignType_Int(UNUSED const void *this,
     return type->type != BUILTIN || type->builtin != INT;
 }
 
-
+int AssignType_Double(UNUSED const void *this,
+                      VarType *type,
+                      UNUSED const Map *symbols) {
+    return type->type != BUILTIN || type->builtin != DOUBLE;
+}

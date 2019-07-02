@@ -14,11 +14,12 @@ static int queue_push(const Queue *this, const void *val) {
     struct queue_data *data = this->data;
     if (data->size + 1 == data->capacity) {
         size_t new_cap = data->capacity + data->cap_diff;
-        const void **new_values =
-            realloc(data->values, new_cap * sizeof(const void*));
+        const void **new_values = realloc(data->values,
+                                          new_cap * sizeof(const void*));
         if (new_values == NULL) {
             return 1;
         }
+        data->values = new_values;
         if (data->back < data->front) {
             for (int i = 0; i < data->back; i++) {
                 data->values[(data->capacity + i) % new_cap] = data->values[i];

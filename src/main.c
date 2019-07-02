@@ -86,10 +86,13 @@ int main(int argc, char *argv[]) {
         if (yyparse(&AST, argv[optind + i], scanner)) {
             status = 1;
         } else {
+            fflush(stdout);
+            fflush(stderr);
             ASTProgramVTable *vtable = AST->vtable;
-            vtable->type_check(AST);
-		    vtable->json(AST, 0, stdout);
-		    fprintf(stdout, "\n");
+            if (!vtable->type_check(AST)) {
+                vtable->json(AST, 0, stdout);
+                fprintf(stdout, "\n");
+            }
 		    vtable->free(AST);
 	    }
 

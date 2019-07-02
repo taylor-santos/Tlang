@@ -119,7 +119,7 @@ expr:
         };
   | DOUBLE_LIT
         {
-            $$ = new_LeafNode(&@$);
+            $$ = new_DoubleNode(&@$, $1);
         };
 
 %%
