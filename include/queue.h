@@ -10,6 +10,7 @@ struct queue {
     int  (*push) (const Queue *this, const void *val);
     int  (*pop)  (const Queue *this, const void *val_ptr);
     int  (*front)(const Queue *this, const void *val_ptr);
+    int  (*back) (const Queue *this, const void *val_ptr);
     int  (*size) (const Queue *this);
     void (*free) (const Queue *this, void (*free_val)(const void*));
 };

@@ -4,6 +4,7 @@
 #include "stack.h"
 #include "queue.h"
 #include "Tlang_parser.h"
+#include "safe.h"
 
 const Stack *indent_stack;
 const Queue *tok_queue;
@@ -37,22 +38,6 @@ typedef struct token {
     *first_indent = 0; \
     indent_stack->push(indent_stack, first_indent); \
 }
-#define RED     "\033[0;91m"
-#define WHITE   "\033[0m"
-// Call the member function pointer 'fn' of struct* 'obj' with any given
-// arguments. If the function returns nonzero, print an internal compiler error
-// and exit the process.
-#define safe_call(obj, fn, ...) { \
-    if (obj->fn(obj, __VA_ARGS__)) { \
-        fprintf(stderr, \
-                "%s:%d: " RED "internal compiler error: " WHITE #obj "." #fn \
-                "(" #__VA_ARGS__ ") failed\n", \
-                __FILE__, \
-                __LINE__); \
-        exit(EXIT_FAILURE); \
-    } \
-} \
-void safe_call()
 
 YY_DECL;
 
@@ -66,27 +51,28 @@ void push_token(Token t) {
     Token *new_t = malloc(sizeof(*new_t));
     memcpy(new_t, &t, sizeof(*new_t));
     new_t->loc = save_loc;
-    safe_call(tok_queue, push, new_t);
+    safe_method_call(tok_queue, push, new_t);
 }
 
 int handle_indentation(int indent_len) {
     int *top_indent = NULL;
-    safe_call(indent_stack, top, &top_indent);
+    safe_method_call(indent_stack, top, &top_indent);
     if (*top_indent < indent_len) {
         push_token((Token){ .type=INDENT });
         int *new_indent = malloc(sizeof(*new_indent));
         *new_indent = indent_len;
-        safe_call(indent_stack, push, new_indent);
+        safe_method_call(indent_stack, push, new_indent);
     } else {
         /* Pop the indent stack until the top is less or equal to the
          * current indentation, emitting OUTDENT each time. If the current
          * indentation level doesn't match any in the stack, output an
          * indentation error. */
         while (indent_stack->size(indent_stack) && *top_indent > indent_len) {
-            safe_call(indent_stack, pop, &top_indent);
+            safe_method_call(indent_stack, pop, &top_indent);
             free(top_indent);
             push_token((Token){ .type=OUTDENT });
-            safe_call(indent_stack, top, &top_indent);
+            push_token((Token){ .type=NEWLINE });
+            safe_method_call(indent_stack, top, &top_indent);
         }
         if (*top_indent < indent_len) {
             return 1;
@@ -98,7 +84,7 @@ int handle_indentation(int indent_len) {
 int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
     if (tok_queue->size(tok_queue) != 0) {
         Token *t;
-        safe_call(tok_queue, pop, &t);
+        safe_method_call(tok_queue, pop, &t);
         *type = t->type;
         *lval = t->value;
         *loc  = t->loc;
@@ -112,6 +98,12 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
                 break;
             case OUTDENT:
                 printf("OUTDENT\n");
+                break;
+            case FUNC:
+                printf("FUNC\n");
+                break;
+            case RETURN:
+                printf("RETURN\n");
                 break;
             case ERROR:
                 printf("ERROR\n");
@@ -142,6 +134,8 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
 %option yylineno
 %option noyywrap
 
+%x normal
+
 %%
 
 %{
@@ -151,30 +145,9 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
     }
 %}
 
-[/]{2}.*                // Ignore comments
+
 ^[ \t]*[\n\r]+          // Ignore empty lines
 ^[ \t]*[/]{2}.*[\n\r]+  // Ignore lines with just comments
-[\\][ \t]*[\n\r]+[ \t]* // Ignore escaped newlines
-
-[0-9]+ {
-    push_token((Token){.type=INT_LIT,    .value.int_val=atoi(yytext)});
-}
-[0-9]+"."[0-9]+ {
-    push_token((Token){.type=DOUBLE_LIT, .value.double_val=atof(yytext)});
-}
-[a-zA-Z_][a-zA-Z0-9_]* {
-    push_token((Token){.type=IDENT,      .value.str_val=strdup(yytext)});
-}
-
-"\n" {
-    push_token((Token){.type=NEWLINE});
-    indent = 0;
-    enum yytokentype type;
-    if (pop_token_queue(yylval, &type, yylloc)) {
-        return type;
-    }
-}
-
 ^" "+ {
     if (indent_type == NOT_SET) {
         indent_type = SPACES;
@@ -183,11 +156,7 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
             "inconsistent use of tabs and spaces in indentation");
         return ERROR;
     }
-    if (handle_indentation(yyleng)) {
-        yyerror(yylloc, NULL, filename, yyscanner,
-            "indentation does not match any outer indentation level");
-        return ERROR;
-    }
+    indent += yyleng;
 }
 ^"\t"+ {
     if (indent_type == NOT_SET) {
@@ -197,36 +166,80 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
             "inconsistent use of tabs and spaces in indentation");
         return ERROR;
     }
-    if (handle_indentation(yyleng)) {
+    indent += yyleng;
+}
+. {
+    unput(*yytext);
+    BEGIN(normal);
+    if (handle_indentation(indent)) {
+        indent = 0;
         yyerror(yylloc, NULL, filename, yyscanner,
             "indentation does not match any outer indentation level");
         return ERROR;
     }
+    indent = 0;
 }
 
-[ \t]+                  // Ignore non-leading whitespace
+<normal>{
+    [/]{2}.*                // Ignore comments
+    [\\][ \t]*[\n\r]+[ \t]* // Ignore escaped newlines
 
-. {
-    push_token((Token){.type=*yytext});
+    func   { push_token((Token){.type=FUNC});   }
+    return { push_token((Token){.type=RETURN}); }
+
+
+
+    [0-9]+ {
+        push_token((Token){.type=INT_LIT,    .value.int_val=atoi(yytext)});
+    }
+    [0-9]+"."[0-9]+ {
+        push_token((Token){.type=DOUBLE_LIT, .value.double_val=atof(yytext)});
+    }
+    [a-zA-Z_][a-zA-Z0-9_]* {
+        push_token((Token){.type=IDENT,      .value.str_val=strdup(yytext)});
+    }
+
+    "\n" {
+        BEGIN(INITIAL);
+        push_token((Token){.type=NEWLINE});
+        indent = 0;
+        enum yytokentype type;
+        if (pop_token_queue(yylval, &type, yylloc)) {
+            return type;
+        }
+    }
+
+    [ \t]+                  // Ignore non-leading whitespace
+
+    . {
+        push_token((Token){.type=*yytext});
+    }
+
+    <<EOF>> {
+        int *top_indent = NULL;
+        if (tok_queue->size(tok_queue) > 0) {
+            Token *tok;
+            safe_method_call(tok_queue, back, &tok);
+            if (tok->type != NEWLINE) {
+                push_token((Token){.type=NEWLINE});
+            }
+        }
+        while (indent_stack->size(indent_stack) > 1) {
+            safe_method_call(indent_stack, pop, &top_indent);
+            free(top_indent);
+            push_token((Token){.type=OUTDENT});
+            push_token((Token){.type=NEWLINE});
+        }
+        enum yytokentype type;
+        if (pop_token_queue(yylval, &type, yylloc)) {
+            return type;
+        }
+        if (tok_queue->size(tok_queue)) {
+            unput(*yytext);
+        } else {
+            return *yytext;
+        }
+    }
 }
-
-<<EOF>> {
-    int *top_indent = NULL;
-    while (indent_stack->size(indent_stack) > 1) {
-        safe_call(indent_stack, pop, &top_indent);
-        free(top_indent);
-        push_token((Token){.type=OUTDENT});
-    }
-    enum yytokentype type;
-    if (pop_token_queue(yylval, &type, yylloc)) {
-        return type;
-    }
-    if (tok_queue->size(tok_queue)) {
-        unput(*yytext);
-    } else {
-        return *yytext;
-    }
-}
-
 
 %%

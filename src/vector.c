@@ -1,7 +1,8 @@
-#include "vector.h"
 #include <stdlib.h>
 #include <string.h> // memcpy()
 #include <stdio.h>
+#include "vector.h"
+#include "safe.h"
 
 struct vector_data {
     const void **values;
@@ -89,7 +90,7 @@ static int vector_array(const Vector *this, int *size, const void *array_ptr) {
     return 0;
 }
 
-static void vector_free(const Vector *this, void (*free_val)(const void*)) {
+static void vector_free(const Vector *this, void (*free_val)(void*)) {
     struct vector_data *data = this->data;
     if (free_val != NULL) {
         for (int i = 0; i < data->size; i++) {
@@ -99,6 +100,40 @@ static void vector_free(const Vector *this, void (*free_val)(const void*)) {
     free(data->values);
     free(data);
     free((void*)this);
+}
+
+static void vector_clear(const Vector *this, void (*free_val)(void*)) {
+    struct vector_data *data = this->data;
+    if (free_val != NULL) {
+        for (int i = 0; i < data->size; i++) {
+            free_val((void*)data->values[i]);
+        }
+    }
+    data->size = 0;
+}
+
+static int vector_copy(const Vector *this,
+                       const Vector **copy_ptr,
+                       int (*val_copy)(const void*, const void*)) {
+    if (copy_ptr == NULL) {
+        return 1;
+    }
+    struct vector_data *data = this->data;
+    *copy_ptr = new_Vector(data->capacity);
+    struct vector_data *copy_data = (*copy_ptr)->data;
+    copy_data->cap_diff = data->cap_diff;
+    for (int i = 0; i < data->size; i++) {
+        const void *new_val = NULL;
+        if (val_copy != NULL) {
+            safe_function_call(val_copy, data->values[i], &new_val);
+        } else {
+            new_val = data->values[i];
+        }
+        if ((*copy_ptr)->append(*copy_ptr, new_val)) {
+            return 1;
+        }
+    }
+    return 0;
 }
 
 const Vector *new_Vector(int capacity) {
@@ -128,5 +163,7 @@ const Vector *new_Vector(int capacity) {
     vector->size   = vector_size;
     vector->array  = vector_array;
     vector->free   = vector_free;
+    vector->clear  = vector_clear;
+    vector->copy   = vector_copy;
     return vector;
 }

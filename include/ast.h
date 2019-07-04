@@ -5,7 +5,7 @@
 #include "vector.h"
 #include "typechecker.h"
 
-#define JSON_TAB_WIDTH 4
+#define JSON_TAB_WIDTH 2
 
 /* AST Node */
 typedef struct ast_node        ASTNode;
@@ -22,7 +22,7 @@ struct ast_node_vtable {
     void   (*free)(const void*);
     void   (*json)(const void*, int, FILE*);
 };
-void free_ASTNode(const void*);
+void free_ASTNode(void*);
 
 
 /* Leaf Node < AST Node*/
@@ -34,7 +34,7 @@ typedef struct ast_program_data   ASTProgramData;
 typedef struct ast_program_vtable ASTProgramVTable;
 struct ast_program_data {
     struct YYLTYPE *loc;
-    const Vector   *statements;
+    const Vector   *statements; // Vector<ASTNode*>
     const Map      *symbols;
 };
 struct ast_program_vtable {
@@ -53,9 +53,23 @@ struct ast_statement_data {
     VarType        *type;
 };
 struct ast_statement_vtable {
-    void     (*free)    (const void*);
-    void     (*json)    (const void*, int, FILE*);
-    VarType *(*get_type)(const void*, const Map*, int*);
+    void (*free)    (const void*);
+    void (*json)    (const void*, int, FILE*);
+    int  (*get_type)(const void*, const Map*, VarType**);
+};
+
+
+/* RExpr Node < Statement Node */
+typedef struct ast_r_expr_data   ASTRExprData;
+typedef struct ast_r_expr_vtable ASTRExprVTable;
+struct ast_r_expr_data {
+    struct YYLTYPE *loc;
+    VarType        *type;
+};
+struct ast_r_expr_vtable {
+    void (*free)    (const void*);
+    void (*json)    (const void*, int, FILE*);
+    int  (*get_type)(const void*, const Map*, VarType**);
 };
 
 
@@ -69,28 +83,29 @@ struct ast_assignment_data {
     VarType        *type;
 };
 struct ast_assignment_vtable {
-    void     (*free)    (const void*);
-    void     (*json)    (const void*, int, FILE*);
-    VarType *(*get_type)(const void*, const Map*, int*);
+    void (*free)    (const void*);
+    void (*json)    (const void*, int, FILE*);
+    int  (*get_type)(const void*, const Map*, VarType**);
 };
 const ASTNode *new_AssignmentNode(struct YYLTYPE *loc,
                                   const void *lhs,
                                   const void *rhs);
 
 
-/* RExpr Node < Statement Node */
-typedef struct ast_r_expr_data   ASTRExprData;
-typedef struct ast_r_expr_vtable ASTRExprVTable;
-struct ast_r_expr_data {
+/* Return Node < Statement Node */
+typedef struct ast_return_data   ASTReturnData;
+typedef struct ast_return_vtable ASTReturnVTable;
+struct ast_return_data {
     struct YYLTYPE *loc;
     VarType        *type;
+    const void     *value;
 };
-struct ast_r_expr_vtable {
-    void     (*free)    (const void*);
-    void     (*json)    (const void*, int, FILE*);
-    VarType *(*get_type)(const void*, const Map*, int*);
+struct ast_return_vtable {
+    void (*free)    (const void*);
+    void (*json)    (const void*, int, FILE*);
+    int  (*get_type)(const void*, const Map*, VarType**);
 };
-
+const ASTNode *new_ReturnNode(struct YYLTYPE *loc, const void *value);
 
 /* LExpr Node < RExpr Node */
 typedef struct ast_l_expr_data   ASTLExprData;
@@ -100,46 +115,31 @@ struct ast_l_expr_data {
     VarType        *type;
 };
 struct ast_l_expr_vtable {
-    void     (*free)       (const void*);
-    void     (*json)       (const void*, int, FILE*);
-    VarType *(*get_type)   (const void*, const Map*, int*);
-    int      (*assign_type)(const void*, VarType*, const Map*);
+    void (*free)       (const void*);
+    void (*json)       (const void*, int, FILE*);
+    int  (*get_type)   (const void*, const Map*, VarType**);
+    int  (*assign_type)(const void*, VarType*, const Map*);
+    int  (*get_vars)   (const void*);
 };
 
 
-/* Variable Node < LExpr Node */
-typedef struct ast_variable_data   ASTVariableData;
-typedef struct ast_variable_vtable ASTVariableVTable;
-struct ast_variable_data {
+/* Function Node < RExpr Node */
+typedef struct ast_function_data   ASTFunctionData;
+typedef struct ast_function_vtable ASTFunctionVTable;
+struct ast_function_data {
     struct YYLTYPE *loc;
     VarType        *type;
-    char           *name;
+    FuncType       *signature;
+    const Vector   *stmts; // Vector<ASTNode*>
 };
-struct ast_variable_vtable {
-    void     (*free)       (const void*);
-    void     (*json)       (const void*, int, FILE*);
-    VarType *(*get_type)   (const void*, const Map*, int*);
-    int      (*assign_type)(const void*, VarType*, const Map*);
+struct ast_function_vtable {
+    void (*free)    (const void*);
+    void (*json)    (const void*, int, FILE*);
+    int  (*get_type)(const void*, const Map*, VarType**);
 };
-const ASTNode *new_VariableNode(struct YYLTYPE *loc, char *name);
-
-
-/* Typed Variable Node < Variable Node */
-typedef struct ast_typed_var_data   ASTTypedVarData;
-typedef struct ast_typed_var_vtable ASTTypedVarVTable;
-struct ast_typed_var_data {
-    struct YYLTYPE *loc;
-    VarType        *type;
-    char           *name;
-    char           *given_type;
-};
-struct ast_typed_var_vtable {
-    void     (*free)       (const void*);
-    void     (*json)       (const void*, int, FILE*);
-    VarType *(*get_type)   (const void*, const Map*, int*);
-    int      (*assign_type)(const void*, VarType*, const Map*);
-};
-const ASTNode *new_TypedVarNode(struct YYLTYPE *loc, char *name, char *type);
+const ASTNode *new_FunctionNode(struct YYLTYPE *loc,
+                                FuncType *signature,
+                                const Vector *stmts);
 
 
 /* Int Node < LExpr Node */
@@ -151,12 +151,13 @@ struct ast_int_data {
     int            val;
 };
 struct ast_int_vtable {
-    void     (*free)       (const void*);
-    void     (*json)       (const void*, int, FILE*);
-    VarType *(*get_type)   (const void*, const Map*, int*);
-    int      (*assign_type)(const void*, VarType*, const Map*);
+    void (*free)       (const void*);
+    void (*json)       (const void*, int, FILE*);
+    int  (*get_type)   (const void*, const Map*, VarType**);
+    int  (*assign_type)(const void*, VarType*, const Map*);
 };
 const ASTNode *new_IntNode(struct YYLTYPE *loc, int val);
+
 
 /* Double Node < LExpr Node */
 typedef struct ast_double_data   ASTDoubleData;
@@ -167,11 +168,48 @@ struct ast_double_data {
     double         val;
 };
 struct ast_double_vtable {
-    void     (*free)       (const void*);
-    void     (*json)       (const void*, int, FILE*);
-    VarType *(*get_type)   (const void*, const Map*, int*);
-    int      (*assign_type)(const void*, VarType*, const Map*);
+    void (*free)       (const void*);
+    void (*json)       (const void*, int, FILE*);
+    int  (*get_type)   (const void*, const Map*, VarType**);
+    int  (*assign_type)(const void*, VarType*, const Map*);
 };
 const ASTNode *new_DoubleNode(struct YYLTYPE *loc, double val);
+
+
+/* Variable Node < LExpr Node */
+typedef struct ast_variable_data   ASTVariableData;
+typedef struct ast_variable_vtable ASTVariableVTable;
+struct ast_variable_data {
+    struct YYLTYPE *loc;
+    VarType        *type;
+    char           *name;
+};
+struct ast_variable_vtable {
+    void (*free)       (const void*);
+    void (*json)       (const void*, int, FILE*);
+    int  (*get_type)   (const void*, const Map*, VarType**);
+    int  (*assign_type)(const void*, VarType*, const Map*);
+    int  (*get_vars)   (const void*);
+};
+const ASTNode *new_VariableNode(struct YYLTYPE *loc, char *name);
+
+
+/* Typed Variable Node < Variable Node */
+typedef struct ast_typed_var_data   ASTTypedVarData;
+typedef struct ast_typed_var_vtable ASTTypedVarVTable;
+struct ast_typed_var_data {
+    struct YYLTYPE *loc;
+    VarType        *type;
+    char           *name;
+    VarType        *given_type;
+};
+struct ast_typed_var_vtable {
+    void (*free)       (const void*);
+    void (*json)       (const void*, int, FILE*);
+    int  (*get_type)   (const void*, const Map*, VarType**);
+    int  (*assign_type)(const void*, VarType*, const Map*);
+    int  (*get_vars)   (const void*);
+};
+const ASTNode *new_TypedVarNode(struct YYLTYPE *loc, char *name, VarType *type);
 
 #endif//AST_H

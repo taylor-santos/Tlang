@@ -63,6 +63,23 @@ static int queue_front(const Queue *this, const void *val_ptr) {
     return 0;
 }
 
+static int queue_back(const Queue *this, const void *val_ptr) {
+    struct queue_data *data = this->data;
+    if (val_ptr == NULL) {
+        return 1;
+    }
+    if (data->size <= 0) {
+        *(const void**)val_ptr = NULL;
+        return 1;
+    }
+    int index = data->back - 1;
+    if (index == -1) {
+        index = data->capacity - 1;
+    }
+    *(const void**)val_ptr = data->values[index];
+    return 0;
+}
+
 static int queue_size(const Queue *this) {
     struct queue_data *data = this->data;
     return data->size;
@@ -105,6 +122,7 @@ const Queue *new_Queue(int capacity) {
     queue->push  = queue_push;
     queue->pop   = queue_pop;
     queue->front = queue_front;
+    queue->back  = queue_back;
     queue->size  = queue_size;
     queue->free  = queue_free;
     return queue;

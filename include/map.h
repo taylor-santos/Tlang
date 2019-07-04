@@ -13,6 +13,7 @@ struct map {
     int  (*put)     (const Map*, const void*, size_t, const void*, const void*);
     int  (*get)     (const Map*, const void*, size_t, const void*);
     int  (*contains)(const Map*, const void*, size_t);
+    int  (*copy)    (const Map*, const Map**, int(*)(const void*, const void*));
     void (*free)    (const Map*, void (*)(void*));
 };
 

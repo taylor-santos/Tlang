@@ -182,6 +182,32 @@ int map_contains(const Map *this, const void *key, size_t len) {
     return 0;
 }
 
+int map_copy(const Map *this,
+             const Map **copy_ptr,
+             int (*copy_val)(const void*, const void*)) {
+    if (copy_ptr == NULL) {
+        return 1;
+    }
+    Data *data = this->data;
+    *copy_ptr = new_Map(data->capacity, data->load_factor);
+    Data *data_copy = (*copy_ptr)->data;
+    data_copy->cap_diff = data->cap_diff;
+    for (size_t i = 0; i < data->capacity; i++) {
+        for (Entry *curr = data->entries[i]; curr != NULL; curr = curr->next) {
+            const void *new = curr->value;
+            if (copy_val != NULL) {
+                if (copy_val(curr->value, &new)) {
+                    return 1;
+                }
+            }
+            if ((*copy_ptr)->put(*copy_ptr, curr->key, curr->len, new, NULL)) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
 void map_free(const Map *this, void (*val_free)(void*)) {
     Data *data = this->data;
     for (size_t i = 0; i < data->capacity; i++) {
@@ -225,6 +251,7 @@ const Map *new_Map(size_t capacity, double load_factor) {
     m->put      = map_put;
     m->get      = map_get;
     m->contains = map_contains;
+    m->copy     = map_copy;
     m->free     = map_free;
     return m;
 
