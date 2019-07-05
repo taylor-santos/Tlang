@@ -1,6 +1,7 @@
 #include "map.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 typedef struct entry Entry;
 typedef struct data  Data;
@@ -20,6 +21,24 @@ struct data {
     double load_factor;
     Entry  **entries;
 };
+
+void print_Map(const Map *this, void (*printer)(const void*)) {
+    Data *data = this->data;
+    char *sep = "";
+    printf("{\n");
+    printf("  ");
+    for (size_t i = 0; i < data->capacity; i++) {
+        for (Entry *curr = data->entries[i]; curr != NULL; curr = curr->next) {
+            const void *val = curr->value;
+            printf("%s", sep);
+            printf("\"%.*s\": \"", (int)curr->len, (char*)curr->key);
+            printer(val);
+            printf("\"");
+            sep = ",\n  ";
+        }
+    }
+    printf("\n}\n");
+}
 
 Entry *new_Entry(const void *key,
                  size_t len,
@@ -247,7 +266,7 @@ const Map *new_Map(size_t capacity, double load_factor) {
         free(data);
         return NULL;
     }
-    m->data = data;
+    m->data     = data;
     m->put      = map_put;
     m->get      = map_get;
     m->contains = map_contains;

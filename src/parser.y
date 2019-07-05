@@ -49,13 +49,13 @@
     FuncType *func_type;
 }
 
-%token             INDENT OUTDENT ERROR NEWLINE FUNC RETURN
+%token             INDENT OUTDENT ERROR NEWLINE FUNC RETURN T_REF ARROW
 %token<int_val>    INT_LIT
 %token<double_val> DOUBLE_LIT
 %token<str_val>    IDENT
 
-%type<ast>       file statement assignment lvalue expr
-%type<vec>       stmts opt_args args opt_named_args named_args
+%type<ast>       file statement assignment l_value r_expr ref_expr expression
+%type<vec>       stmts opt_args args opt_named_args named_args call_list
 %type<var_type>  type_def
 %type<func_type> func_def named_func_def
 %type<named_arg> named_type_def
@@ -87,11 +87,15 @@ stmts:
         }
 
 statement:
-    assignment NEWLINE
+    IDENT ';' type_def NEWLINE
+        {
+            $$ = new_TypedVarNode(&@$, $1, $3);
+        }
+  | assignment NEWLINE
         {
             $$ = $1;
         }
-  | RETURN expr NEWLINE
+  | RETURN assignment NEWLINE
         {
             $$ = new_ReturnNode(&@$, $2);
         }
@@ -101,23 +105,59 @@ statement:
         }
 
 assignment:
-    expr
+    expression
         {
             $$ = $1;
         }
-  | lvalue '=' assignment
+  | l_value '=' assignment
         {
             $$ = new_AssignmentNode(&@$, $1, $3);
         }
 
-lvalue:
+expression:
+    call_list
+        {
+            $$ = new_ExpressionNode(&@$, $1);
+        }
+
+call_list:
+    ref_expr
+        {
+            $$ = new_Vector(0);
+            safe_method_call($$, append, $1);
+        }
+  | call_list ref_expr
+        {
+            $$ = $1;
+            safe_method_call($$, append, $2);
+        }
+
+ref_expr:
+    r_expr
+        {
+            $$ = $1;
+        }
+  | '(' call_list ')'
+        {
+
+            $$ = new_ParenNode(&@$, new_ExpressionNode(&@$, $2));
+        }
+  | T_REF r_expr
+        {
+            $$ = new_RefNode(&@$, $2);
+        }
+  | T_REF '(' call_list ')'
+        {
+            $$ = new_RefNode(&@$,
+                     new_ParenNode(&@$,
+                         new_ExpressionNode(&@$, $3)));
+        }
+
+
+l_value:
     IDENT
         {
             $$ = new_VariableNode(&@$, $1);
-        }
-  | IDENT ':' type_def
-        {
-            $$ = new_TypedVarNode(&@$, $1, $3);
         }
 
 type_def:
@@ -132,7 +172,7 @@ type_def:
         }
         
 named_func_def:
-    FUNC '(' opt_named_args ')' ':' type_def
+    FUNC '(' opt_named_args ')' ARROW type_def
         {
             safe_function_call(new_FuncType, $3, $6, &$$);
         }
@@ -142,9 +182,21 @@ named_func_def:
             safe_function_call(new_NoneType, &none);
             safe_function_call(new_FuncType, $3, none, &$$);
         }
-        
+  | FUNC ARROW type_def
+        {
+            const Vector *args = new_Vector(0);
+            safe_function_call(new_FuncType, args, $3, &$$);
+        }
+  | FUNC
+        {
+            const Vector *args = new_Vector(0);
+            VarType *none = NULL;
+            safe_function_call(new_NoneType, &none);
+            safe_function_call(new_FuncType, args, none, &$$);
+        }
+
 func_def:
-    FUNC '(' opt_args ')' ':' type_def
+    FUNC '(' opt_args ')' ARROW type_def
         {
             safe_function_call(new_FuncType, $3, $6, &$$);
         }
@@ -154,9 +206,19 @@ func_def:
             safe_function_call(new_NoneType, &none);
             safe_function_call(new_FuncType, $3, none, &$$);
         }
+  | FUNC ARROW type_def
+        {
+            const Vector *args = new_Vector(0);
+            safe_function_call(new_FuncType, args, $3, &$$);
+        }
+  | '(' type_def ')' FUNC '(' opt_args ')' ARROW type_def
+        {
+            safe_function_call(new_FuncType, $6, $9, &$$);
+            safe_function_call(new_NamedArg, NULL, $2, &$$->extension);
+        }
 
-expr:
-    lvalue
+r_expr:
+    l_value
         {
             $$ = $1;
         }
@@ -171,6 +233,11 @@ expr:
   | named_func_def NEWLINE INDENT stmts OUTDENT
         {
             $$ = new_FunctionNode(&@$, $1, $4);
+        }
+  | '(' IDENT ':' type_def ')' named_func_def NEWLINE INDENT stmts OUTDENT
+        {
+            safe_function_call(new_NamedArg, $2, $4, &$6->extension);
+            $$ = new_FunctionNode(&@$, $6, $9);
         }
 
 opt_named_args:

@@ -4,12 +4,15 @@
 #include "ast.h"
 #include "safe.h"
 
+static GetTypeState *state;
+static int ref_depth = 0;
 static const Vector *assigned_vars; // Use this to store any variables that will
-// be assigned to an object with scope. They
-// will then be visible within that scope as
-// instances of itself.
+                                    // be assigned to an object with scope. They
+                                    // will then be visible within that scope as
+                                    // instances of itself.
 
 static int funccmp(const FuncType *type1, const FuncType *type2);
+static int copy_FuncType(FuncType *type, FuncType **copy_ptr);
 
 static int strdup_safe(const char *str, char **dup_ptr) {
     if (dup_ptr == NULL) {
@@ -22,23 +25,79 @@ static int strdup_safe(const char *str, char **dup_ptr) {
     return 0;
 }
 
+int add_builtins(const Map *map) {
+    if (map == NULL) {
+        return 1;
+    }
+    const char *binops[] = { "+", "-", "*", "/" };
+    size_t n = sizeof(binops) / sizeof(*binops);
+    for (size_t i = 0; i < n; i++) {
+        VarType *arg_type = NULL;
+        safe_function_call(new_VarType, "int", &arg_type);
+        NamedArg *arg = NULL;
+        safe_function_call(new_NamedArg, strdup("b"), arg_type, &arg);
+        const Vector *args = new_Vector(0);
+        safe_method_call(args, append, arg);
+        VarType *ret_type = NULL;
+        safe_function_call(new_VarType, "int", &ret_type);
+        FuncType *func = NULL;
+        safe_function_call(new_FuncType, args, ret_type, &func);
+        VarType *ext_type = NULL;
+        safe_function_call(new_VarType, "int", &ext_type);
+        safe_function_call(new_NamedArg,
+            strdup("a"),
+            ext_type,
+            &func->extension);
+        VarType *func_type = NULL;
+        safe_function_call(new_VarType_from_FuncType, func, &func_type);
+        VarType *prev_type = NULL;
+        safe_method_call(map,
+                         put,
+                         binops[i],
+                         strlen(binops[i]),
+                         func_type,
+                         &prev_type);
+        if (prev_type != NULL) {
+            free_VarType(prev_type);
+        }
+    }
+    return 0;
+}
+
 void free_VarType(void *this) {
     VarType *type = this;
     switch(type->type) {
         case BUILTIN:
             free(this);
-            break;
+            return;
+        case FUNCTION:
+            free_FuncType(type->function);
+            free(this);
+            return;
         case NONE:
             free(this);
-            break;
-        case FUNCTION:
-            type->function->arg_names->free(type->function->arg_types, free);
-            type->function->arg_types->free(type->function->arg_types,
-                                            free_VarType);
-            free_VarType(type->function->ret_type);
+            return;
+        case REF:
             free(this);
-            break;
+            return;
     }
+}
+
+void free_FuncType(void *this) {
+    FuncType *type = this;
+    type->named_args->free(type->named_args, free_NamedArg);
+    free_VarType(type->ret_type);
+    if (type->extension != NULL) {
+        free_NamedArg(type->extension);
+    }
+    free(this);
+}
+
+void free_NamedArg(void *this) {
+    NamedArg *arg = this;
+    free(arg->name);
+    free_VarType(arg->type);
+    free(this);
 }
 
 int new_VarType(const char *type, VarType **vartype_ptr) {
@@ -47,6 +106,12 @@ int new_VarType(const char *type, VarType **vartype_ptr) {
         (*vartype_ptr)->init = 0;
         (*vartype_ptr)->type = BUILTIN;
         (*vartype_ptr)->builtin = INT;
+        return 0;
+    } else if (strcmp(type, "double") == 0) {
+        *vartype_ptr = malloc(sizeof(**vartype_ptr));
+        (*vartype_ptr)->init = 0;
+        (*vartype_ptr)->type = BUILTIN;
+        (*vartype_ptr)->builtin = DOUBLE;
         return 0;
     } else {
         //TODO: Create VarTypes from classes
@@ -63,6 +128,18 @@ int new_NoneType(VarType **vartype_ptr) {
         return 1;
     }
     (*vartype_ptr)->type = NONE;
+    return 0;
+}
+
+int new_RefType(VarType **vartype_ptr) {
+    if (vartype_ptr == NULL) {
+        return 1;
+    }
+    *vartype_ptr = malloc(sizeof(**vartype_ptr));
+    if (*vartype_ptr == NULL) {
+        return 1;
+    }
+    (*vartype_ptr)->type = REF;
     return 0;
 }
 
@@ -100,12 +177,60 @@ int new_FuncType(const Vector *args, VarType *ret_type, FuncType **functype_ptr)
     if (*functype_ptr == NULL) {
         return 1;
     }
-    (*functype_ptr)->arg_types = args;
+    (*functype_ptr)->named_args = args;
     (*functype_ptr)->ret_type  = ret_type;
+    (*functype_ptr)->ret_type->init = 1;
+    (*functype_ptr)->extension = NULL;
     return 0;
 }
 
-static int copy_FuncType(FuncType *type, FuncType **copy_ptr);
+void print_VarType(const void *this) {
+    const VarType *type = this;
+    switch(type->type) {
+        case BUILTIN:
+            switch(type->builtin) {
+                case INT:
+                    printf("int");
+                    break;
+                case DOUBLE:
+                    printf("double");
+                    break;
+            }
+            break;
+        case FUNCTION:
+            if (type->function->extension != NULL) {
+                printf("(");
+                if (type->function->extension->name != NULL) {
+                    printf("%s:", type->function->extension->name);
+                }
+                print_VarType(type->function->extension->type);
+                printf(")");
+            }
+            printf("fn(");
+            FuncType *func = type->function;
+            int n = func->named_args->size(func->named_args);
+            char *sep = "";
+            for (int i = 0; i < n; i++) {
+                NamedArg *arg = NULL;
+                safe_method_call(func->named_args, get, i, &arg);
+                printf("%s", sep);
+                if (arg->name != NULL) {
+                    printf("%s:", arg->name);
+                }
+                print_VarType(arg->type);
+                sep = ", ";
+            }
+            printf(")->");
+            print_VarType(func->ret_type);
+            break;
+        case NONE:
+            printf("none");
+            break;
+        case REF:
+            printf("ref ");
+            break;
+    }
+}
 
 static int copy_VarType(const void *type, const void *copy_ptr) {
     VarType *VT_type      = (VarType*)type;
@@ -122,12 +247,14 @@ static int copy_VarType(const void *type, const void *copy_ptr) {
         case BUILTIN:
             (*VT_copy_ptr)->builtin = VT_type->builtin;
             break;
-        case NONE:
-            break;
         case FUNCTION:
             safe_function_call(copy_FuncType,
-                               VT_type->function,
-                               &(*VT_copy_ptr)->function);
+            VT_type->function,
+            &(*VT_copy_ptr)->function);
+            break;
+        case NONE:
+            break;
+        case REF:
             break;
     }
     (*VT_copy_ptr)->init = VT_type->init;
@@ -142,7 +269,11 @@ static int copy_NamedArg(const void *this, const void *copy_ptr) {
     }
     *copy = malloc(sizeof(**copy));
     safe_function_call(copy_VarType, arg->type, &(*copy)->type);
-    safe_function_call(strdup_safe, arg->name, &(*copy)->name);
+    if (arg->name != NULL) {
+        safe_function_call(strdup_safe, arg->name, &(*copy)->name);
+    } else {
+        (*copy)->name = NULL;
+    }
     return 0;
 }
 
@@ -154,11 +285,18 @@ static int copy_FuncType(FuncType *type, FuncType **copy_ptr) {
     if (*copy_ptr == NULL) {
         return 1;
     }
-    safe_method_call(type->arg_types,
+    safe_method_call(type->named_args,
                      copy,
-                     &(*copy_ptr)->arg_types,
+                     &(*copy_ptr)->named_args,
                      copy_NamedArg);
     safe_function_call(copy_VarType, type->ret_type, &(*copy_ptr)->ret_type);
+    if (type->extension != NULL) {
+        safe_function_call(copy_NamedArg,
+                           type->extension,
+                           &(*copy_ptr)->extension);
+    } else {
+        (*copy_ptr)->extension = NULL;
+    }
     return 0;
 }
 
@@ -174,6 +312,9 @@ static int typecmp(const VarType *type1, const VarType *type2) {
             return funccmp(type1->function, type2->function);
         case NONE:
             return 0;
+        case REF:
+            return 1; //TODO: Should ref types be comparable? The caller should
+                      //      probably handle checking the referenced type
     }
     fprintf(stderr, "%s:%d: " RED "internal compiler error: " WHITE "switch "
             "statement failed to cover all cases\n", __FILE__, __LINE__);
@@ -183,8 +324,8 @@ static int typecmp(const VarType *type1, const VarType *type2) {
 static int funccmp(const FuncType *type1, const FuncType *type2) {
     int size1, size2;
     NamedArg **arr1 = NULL, **arr2 = NULL;
-    safe_method_call(type1->arg_types, array, &size1, &arr1);
-    safe_method_call(type2->arg_types, array, &size2, &arr2);
+    safe_method_call(type1->named_args, array, &size1, &arr1);
+    safe_method_call(type2->named_args, array, &size2, &arr2);
     if (size1 != size2) {
         return 1;
     }
@@ -200,6 +341,10 @@ int TypeCheck_Program(const void *this) {
     const ASTNode  *node  = this;
     ASTProgramData *data  = node->data;
     const Vector   *stmts = data->statements;
+    if (state == NULL) {
+        state = malloc(sizeof(*state));
+    }
+    state->scope_type = NULL;
     int size = 0;
     ASTNode **stmt_arr = NULL;
     safe_method_call(stmts, array, &size, &stmt_arr);
@@ -209,7 +354,9 @@ int TypeCheck_Program(const void *this) {
         VarType *type = NULL;
         errstate = vtable->get_type(stmt_arr[i], data->symbols, &type)
                    || errstate;
+        print_Map(data->symbols, print_VarType);
     }
+    print_Map(data->symbols, print_VarType);
     return errstate;
 }
 
@@ -232,6 +379,7 @@ int GetType_Assignment(const void *this,
     lhs_vtable->get_vars(lhs);
     *type_ptr = NULL;
     err = rhs_vtable->get_type(rhs, symbols, type_ptr) || err;
+    assigned_vars->clear(assigned_vars, NULL);
     if (*type_ptr == NULL) {
         return 1;
     }
@@ -254,8 +402,212 @@ int GetType_Return(UNUSED const void *this,
     if (type_ptr == NULL) {
         return 1;
     }
+    if (state == NULL || state->scope_type->type != FUNCTION) {
+        //TODO: Handle return statement outside of function
+        fprintf(stderr, "return statement outside of function\n");
+        return 1;
+    }
+    const ASTNode *node = this;
+    ASTReturnData *data = node->data;
+    const ASTNode *ret_expr = data->returns;
+    if (ret_expr == NULL) {
+        // Returns nothing
+        if (state->scope_type->function->ret_type->type != NONE) {
+            //TODO: Handle incompatible return type
+            fprintf(stderr,
+                    "error: returning nothing from a function that expects a "
+                    "return type\n");
+            return 1;
+        } else {
+            return 0;
+        }
+    }
+    VarType *ret_type = NULL;
+    ASTRExprVTable *ret_vtable = ret_expr->vtable;
+    if (ret_vtable->get_type(ret_expr, symbols, &ret_type)) {
+        //TODO: Handle failed to infer type of returned value
+        fprintf(stderr, "error: failed to infer type of returned value\n");
+        return 1;
+    } else {
+        FuncType *func_type = state->scope_type->function;
+        // Compare stated return type of function to type of return statement
+        if (typecmp(func_type->ret_type, ret_type)) {
+            //TODO: Handle incompatible return statement to function return type
+            fprintf(stderr, "error: incompatible return type\n");
+            return 1;
+        }
+    }
     safe_function_call(new_NoneType, type_ptr);
     return 0;
+}
+
+int parse_expression(const ASTNode **nodes,
+                     int size,
+                     int *index_ptr,
+                     const Map *symbols,
+                     VarType **type_ptr,
+                     int ret_first_type) {
+    if (*index_ptr < 0 || size <= *index_ptr) {
+        //TODO: Handle not enough arguments
+        fprintf(stderr, "error: Not enough arguments\n");
+        return 1;
+    }
+    ASTStatementVTable *vtable = nodes[*index_ptr]->vtable;
+    VarType* type = NULL;
+    if (vtable->get_type(nodes[*index_ptr], symbols, &type)) {
+        return 1;
+    }
+    (*index_ptr)++;
+    VarType *expr_type = NULL;
+    switch (type->type) {
+        case BUILTIN:
+            expr_type = type;
+            break;
+        case FUNCTION:
+            while (type->type == FUNCTION && ref_depth != 1) {
+                ref_depth--;
+                if (type->function->extension != NULL) {
+                    *type_ptr = type;
+                    return 0;
+                }
+                int arg_count =
+                    type->function->named_args->size(
+                        type->function->named_args);
+                for (int i = 0; i < arg_count; i++) {
+                    VarType *arg_type = NULL;
+                    if (parse_expression(nodes,
+                                         size,
+                                         index_ptr,
+                                         symbols,
+                                         &arg_type,
+                                         1)) {
+                        return 1;
+                    }
+                    NamedArg *expected_arg = NULL;
+                    safe_method_call(type->function->named_args,
+                                     get,
+                                     i,
+                                     &expected_arg);
+                    if (typecmp(arg_type, expected_arg->type)) {
+                        //TODO: Handle incompatible argument type
+                        fprintf(stderr,
+                            "error: incompatible argument type\n");
+                        return 1;
+                    }
+                }
+                type = type->function->ret_type;
+            }
+            expr_type = type;
+            break;
+        case NONE:
+            expr_type = type;
+            break;
+        case REF:;
+            ASTRefData *ref_data = nodes[*index_ptr - 1]->data;
+            const ASTNode *ref_node = ref_data->val;
+            ASTStatementVTable *ref_vtable = ref_node->vtable;
+            if (ref_vtable->get_type(ref_node, symbols, &expr_type)) {
+                return 1;
+            }
+            break;
+    }
+    while (ret_first_type == 0 && *index_ptr < size) {
+        VarType *new_type;
+        if (parse_expression(nodes,
+                             size,
+                             index_ptr,
+                             symbols,
+                             &new_type,
+                             0)) {
+            return 1;
+        }
+        if (new_type->type == FUNCTION &&
+            new_type->function->extension != NULL) {
+            if (typecmp(new_type->function->extension->type, expr_type)) {
+                //TODO: Handle incompatible left-hand type
+                fprintf(stderr, "error: incompatible left-hand type\n");
+                return 1;
+            } else {
+                int arg_count =
+                    new_type->function->named_args->size(
+                        new_type->function->named_args);
+                for (int i = 0; i < arg_count; i++) {
+                    VarType *arg_type = NULL;
+                    if (parse_expression(nodes,
+                                         size,
+                                         index_ptr,
+                                         symbols,
+                                         &arg_type,
+                                         1)) {
+                        return 1;
+                    }
+                    NamedArg *expected_arg = NULL;
+                    safe_method_call(new_type->function->named_args,
+                                     get,
+                                     i,
+                                     &expected_arg);
+                    if (typecmp(arg_type, expected_arg->type)) {
+                        //TODO: Handle incompatible argument type
+                        fprintf(stderr,
+                            "error: incompatible argument type\n");
+                        return 1;
+                    }
+                }
+                expr_type = new_type->function->ret_type;
+            }
+        } else {
+            //TODO: Handle dangling expression
+            fprintf(stderr, "error: dangling expression\n");
+            return 1;
+        }
+    }
+    *type_ptr = expr_type;
+    return 0;
+}
+
+int GetType_Expression(const void *this,
+                       const Map *symbols,
+                       VarType **type_ptr) {
+    if (type_ptr == NULL) {
+        return 1;
+    }
+    const ASTNode     *node  = this;
+    ASTExpressionData *data  = node->data;
+    const Vector      *exprs = data->exprs;
+    const ASTNode **nodes = NULL;
+    int size = exprs->size(exprs);
+    safe_method_call(exprs, array, &size, &nodes);
+    int index = 0;
+    return parse_expression(nodes, size, &index, symbols, type_ptr, 0);
+}
+
+int GetType_Ref(const void *this,
+                const Map *symbols,
+                VarType **type_ptr) {
+    if (type_ptr == NULL) {
+        return 1;
+    }
+    const ASTNode *node = this;
+    ASTRefData    *data = node->data;
+    ref_depth = 1;
+    ASTStatementVTable *vtable = data->val->vtable;
+    int result = vtable->get_type(data->val, symbols, type_ptr);
+    ref_depth = 0;
+    return result;
+}
+
+int GetType_Paren(const void *this,
+                  UNUSED const Map *symbols,
+                  VarType **type_ptr) {
+    if (type_ptr == NULL) {
+        return 1;
+    }
+    const ASTNode *node = this;
+    ASTRefData    *data = node->data;
+    ASTStatementVTable *vtable = data->val->vtable;
+    if (ref_depth != 0)
+        ref_depth++;
+    return vtable->get_type(data->val, symbols, type_ptr);
 }
 
 int GetType_Variable(const void *this, const Map *symbols, VarType **type_ptr) {
@@ -328,15 +680,15 @@ int GetType_Double(UNUSED const void *this,
 }
 
 int GetType_Function(const void *this,
-                     UNUSED const Map *symbols,
+                     const Map *symbols,
                      VarType **type_ptr) {
     if (type_ptr == NULL) {
         return 1;
     }
     const ASTNode *node = this;
     ASTFunctionData *data = node->data;
-    const Map *symbols_copy = NULL;
-    safe_method_call(symbols, copy, &symbols_copy, copy_VarType);
+    data->symbols->free(data->symbols, free_VarType);
+    safe_method_call(symbols, copy, &data->symbols, copy_VarType);
     for (int i = 0; i < assigned_vars->size(assigned_vars); i++) {
         char *var = NULL;
         safe_method_call(assigned_vars, get, i, &var);
@@ -344,23 +696,65 @@ int GetType_Function(const void *this,
         VarType *type_copy = NULL;
         safe_function_call(copy_VarType, data->type, &type_copy);
         VarType *prev_type = NULL;
-        safe_method_call(symbols_copy, put, var, len, type_copy, &prev_type);
+        safe_method_call(data->symbols, put, var, len, type_copy, &prev_type);
         if (prev_type != NULL) {
             //TODO: Verify type compatibility
+            fprintf(stderr, "Possible type conflict???\n");
+            free_VarType(prev_type);
+        }
+    }
+    if (data->signature->extension != NULL) {
+        VarType *type_copy = NULL;
+        safe_function_call(copy_VarType,
+            data->signature->extension->type,
+            &type_copy);
+        VarType *prev_type = NULL;
+        safe_method_call(data->symbols,
+            put,
+            data->signature->extension->name,
+            strlen(data->signature->extension->name),
+            type_copy,
+            &prev_type);
+        if (prev_type != NULL) {
+            //TODO: Handle argument type conflict with outer scope variable
+            free_VarType(prev_type);
+        }
+    }
+    //TODO: ensure argument name does not conflict with extension name
+    FuncType *signature = data->signature;
+    NamedArg **args = NULL;
+    int num_args;
+    safe_method_call(signature->named_args, array, &num_args, &args);
+    for (int i = 0; i < num_args; i++) {
+        VarType *type_copy = NULL;
+        safe_function_call(copy_VarType, args[i]->type, &type_copy);
+        size_t arg_len = strlen(args[i]->name);
+        VarType *prev_type = NULL;
+        safe_method_call(data->symbols,
+                         put,
+                         args[i]->name,
+                         arg_len,
+                         type_copy,
+                         &prev_type);
+        if (prev_type != NULL) {
+            //TODO: Handle argument type conflict with outer scope variable
             free_VarType(prev_type);
         }
     }
     assigned_vars->clear(assigned_vars, NULL);
+    VarType *prev_scope = state->scope_type;
 
     int size = 0;
     ASTNode **stmt_arr = NULL;
     safe_method_call(data->stmts, array, &size, &stmt_arr);
+    state->scope_type = data->type;
     int err = 0;
     for (int i = 0; i < size; i++) {
         ASTStatementVTable *vtable = stmt_arr[i]->vtable;
         VarType *type = NULL;
-        err = vtable->get_type(stmt_arr[i], symbols_copy, &type) || err;
+        err = vtable->get_type(stmt_arr[i], data->symbols, &type) || err;
     }
+    state->scope_type = prev_scope;
     *type_ptr = data->type;
     return 0;
 }

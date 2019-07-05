@@ -88,8 +88,8 @@ int main(int argc, char *argv[]) {
         } else {
             ASTProgramVTable *vtable = AST->vtable;
             if (!vtable->type_check(AST)) {
-                vtable->json(AST, 0, stdout);
-                fprintf(stdout, "\n");
+             //   vtable->json(AST, 0, stdout);
+             //   fprintf(stdout, "\n");
             }
 		    vtable->free(AST);
 	    }

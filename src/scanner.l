@@ -89,37 +89,44 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
         *lval = t->value;
         *loc  = t->loc;
         free(t);
+        /*
         switch(*type) {
             case NEWLINE:
                 printf("NEWLINE\n");
-                break;
+                return 1;
             case INDENT:
                 printf("INDENT\n");
-                break;
+                return 1;
             case OUTDENT:
                 printf("OUTDENT\n");
-                break;
+                return 1;
             case FUNC:
                 printf("FUNC\n");
-                break;
+                return 1;
             case RETURN:
                 printf("RETURN\n");
-                break;
+                return 1;
+            case T_REF:
+                printf("REF\n");
+                return 1;
+            case ARROW:
+                printf("ARROW\n");
+                return 1;
             case ERROR:
                 printf("ERROR\n");
-                break;
+                return 1;
             case INT_LIT:
                 printf("INT_LIT    (%d)\n", lval->int_val);
-                break;
+                return 1;
             case DOUBLE_LIT:
                 printf("DOUBLE_LIT (%f)\n", lval->double_val);
-                break;
+                return 1;
             case IDENT:
                 printf("IDENT      (%s)\n", lval->str_val);
-                break;
-            default:
-                printf("LITERAL    (%c)\n", *type);
+                return 1;
         }
+        printf("LITERAL    (%c)\n", *type);
+         */
         return 1;
     }
     return 0;
@@ -148,6 +155,7 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
 
 ^[ \t]*[\n\r]+          // Ignore empty lines
 ^[ \t]*[/]{2}.*[\n\r]+  // Ignore lines with just comments
+
 ^" "+ {
     if (indent_type == NOT_SET) {
         indent_type = SPACES;
@@ -168,6 +176,29 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
     }
     indent += yyleng;
 }
+
+<<EOF>> {
+    int *top_indent = NULL;
+    if (tok_queue->size(tok_queue) > 0) {
+        Token *tok;
+        safe_method_call(tok_queue, back, &tok);
+        if (tok->type != NEWLINE) {
+            push_token((Token){.type=NEWLINE});
+        }
+    }
+    while (indent_stack->size(indent_stack) > 1) {
+        safe_method_call(indent_stack, pop, &top_indent);
+        free(top_indent);
+        push_token((Token){.type=OUTDENT});
+        push_token((Token){.type=NEWLINE});
+    }
+    enum yytokentype type;
+    if (pop_token_queue(yylval, &type, yylloc)) {
+        return type;
+    }
+    return *yytext;
+}
+
 . {
     unput(*yytext);
     BEGIN(normal);
@@ -184,15 +215,16 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
     [/]{2}.*                // Ignore comments
     [\\][ \t]*[\n\r]+[ \t]* // Ignore escaped newlines
 
-    func   { push_token((Token){.type=FUNC});   }
-    return { push_token((Token){.type=RETURN}); }
-
-
+    func    { push_token((Token){.type=FUNC}); }
+    return  { push_token((Token){.type=RETURN}); }
+    def     { push_token((Token){.type=T_REF}); }
+    ->      { push_token((Token){.type=ARROW}); }
+    [+\-*/] { push_token((Token){.type=IDENT, .value.str_val=strdup(yytext)}); }
 
     [0-9]+ {
         push_token((Token){.type=INT_LIT,    .value.int_val=atoi(yytext)});
     }
-    [0-9]+"."[0-9]+ {
+    [0-9]+"."[0-9]* {
         push_token((Token){.type=DOUBLE_LIT, .value.double_val=atof(yytext)});
     }
     [a-zA-Z_][a-zA-Z0-9_]* {
@@ -210,35 +242,8 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
     }
 
     [ \t]+                  // Ignore non-leading whitespace
-
     . {
         push_token((Token){.type=*yytext});
-    }
-
-    <<EOF>> {
-        int *top_indent = NULL;
-        if (tok_queue->size(tok_queue) > 0) {
-            Token *tok;
-            safe_method_call(tok_queue, back, &tok);
-            if (tok->type != NEWLINE) {
-                push_token((Token){.type=NEWLINE});
-            }
-        }
-        while (indent_stack->size(indent_stack) > 1) {
-            safe_method_call(indent_stack, pop, &top_indent);
-            free(top_indent);
-            push_token((Token){.type=OUTDENT});
-            push_token((Token){.type=NEWLINE});
-        }
-        enum yytokentype type;
-        if (pop_token_queue(yylval, &type, yylloc)) {
-            return type;
-        }
-        if (tok_queue->size(tok_queue)) {
-            unput(*yytext);
-        } else {
-            return *yytext;
-        }
     }
 }
 

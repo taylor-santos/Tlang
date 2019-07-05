@@ -19,4 +19,6 @@ struct map {
 
 const Map *new_Map(size_t, double);
 
+void print_Map(const Map*, void(*printer)(const void*));
+
 #endif//MAP_H
