@@ -50,6 +50,7 @@ int add_builtins(const Map *map) {
             &func->extension);
         VarType *func_type = NULL;
         safe_function_call(new_VarType_from_FuncType, func, &func_type);
+        func_type->init = 1;
         VarType *prev_type = NULL;
         safe_method_call(map,
                          put,
@@ -186,6 +187,9 @@ int new_FuncType(const Vector *args, VarType *ret_type, FuncType **functype_ptr)
 
 void print_VarType(const void *this) {
     const VarType *type = this;
+    if (type->init) {
+        printf("i: ");
+    }
     switch(type->type) {
         case BUILTIN:
             switch(type->builtin) {
@@ -201,7 +205,7 @@ void print_VarType(const void *this) {
             if (type->function->extension != NULL) {
                 printf("(");
                 if (type->function->extension->name != NULL) {
-                    printf("%s:", type->function->extension->name);
+                    printf("%s: ", type->function->extension->name);
                 }
                 print_VarType(type->function->extension->type);
                 printf(")");
@@ -475,6 +479,7 @@ int parse_expression(const ASTNode **nodes,
                         type->function->named_args);
                 for (int i = 0; i < arg_count; i++) {
                     VarType *arg_type = NULL;
+                    int prev_ref_depth = ref_depth;
                     if (parse_expression(nodes,
                                          size,
                                          index_ptr,
@@ -483,6 +488,7 @@ int parse_expression(const ASTNode **nodes,
                                          1)) {
                         return 1;
                     }
+                    ref_depth = prev_ref_depth;
                     NamedArg *expected_arg = NULL;
                     safe_method_call(type->function->named_args,
                                      get,
@@ -506,9 +512,11 @@ int parse_expression(const ASTNode **nodes,
             ASTRefData *ref_data = nodes[*index_ptr - 1]->data;
             const ASTNode *ref_node = ref_data->val;
             ASTStatementVTable *ref_vtable = ref_node->vtable;
+            ref_depth = 1;
             if (ref_vtable->get_type(ref_node, symbols, &expr_type)) {
                 return 1;
             }
+            ref_depth = 0;
             break;
     }
     while (ret_first_type == 0 && *index_ptr < size) {
@@ -589,9 +597,17 @@ int GetType_Ref(const void *this,
     }
     const ASTNode *node = this;
     ASTRefData    *data = node->data;
+    *type_ptr = data->type;
+    return 0;
     ref_depth = 1;
     ASTStatementVTable *vtable = data->val->vtable;
-    int result = vtable->get_type(data->val, symbols, type_ptr);
+    VarType *new_type = NULL;
+    int result = vtable->get_type(data->val, symbols, &new_type);
+    print_VarType(new_type);
+    printf("\n");
+    print_VarType(data->type);
+    printf("\n");
+    *type_ptr = new_type;
     ref_depth = 0;
     return result;
 }
