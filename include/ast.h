@@ -130,14 +130,13 @@ typedef struct ast_ref_vtable ASTRefVTable;
 struct ast_ref_data {
     struct YYLTYPE *loc;
     VarType        *type;
-    const ASTNode  *val;
 };
 struct ast_ref_vtable {
     void (*free)      (const void*);
     void (*json)      (const void*, int, FILE*);
     int  (*get_type)(const void*, const Map*, VarType**);
 };
-const ASTNode *new_RefNode(struct YYLTYPE *loc, const ASTNode *val);
+const ASTNode *new_RefNode(struct YYLTYPE *loc);
 
 
 /* Paren Node < Statement Node */
@@ -154,6 +153,21 @@ struct ast_paren_vtable {
     int  (*get_type)(const void*, const Map*, VarType**);
 };
 const ASTNode *new_ParenNode(struct YYLTYPE *loc, const ASTNode *val);
+
+
+/* Call Node < Statement Node */
+typedef struct ast_call_data   ASTCallData;
+typedef struct ast_call_vtable ASTCallVTable;
+struct ast_call_data {
+    struct YYLTYPE *loc;
+    VarType        *type;
+};
+struct ast_call_vtable {
+    void (*free)      (const void*);
+    void (*json)      (const void*, int, FILE*);
+    int  (*get_type)(const void*, const Map*, VarType**);
+};
+const ASTNode *new_CallNode(struct YYLTYPE *loc);
 
 
 /* LExpr Node < RExpr Node */

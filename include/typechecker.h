@@ -3,6 +3,7 @@
 
 #include "map.h"
 #include "vector.h"
+#include "stack.h"
 
 typedef struct var_type      VarType;
 typedef struct named_arg     NamedArg;
@@ -10,7 +11,7 @@ typedef struct func_type     FuncType;
 typedef struct gettype_state GetTypeState;
 
 struct var_type {
-    enum { BUILTIN, FUNCTION, NONE, REF } type;
+    enum { BUILTIN, FUNCTION, NONE, REFERENCE, CALLER } type;
     union {
         enum { INT, DOUBLE } builtin;
         FuncType *function;
@@ -31,6 +32,7 @@ struct func_type {
 
 struct gettype_state {
     VarType *scope_type;
+    const Stack *expr_stack;
 };
 
 int add_builtins(const Map*);
@@ -41,7 +43,8 @@ void free_NamedArg(void*);
 
 int new_VarType(const char *type, VarType **vartype_ptr);
 int new_NoneType(VarType **vartype_ptr);
-int new_RefType(VarType **vartype_ptr);
+int new_RefType(VarType  **vartype_ptr);
+int new_CallType(VarType **vartype_ptr);
 int new_VarType_from_FuncType(FuncType *type, VarType **vartype_ptr);
 int new_NamedArg(char *name, VarType *type, NamedArg **namedarg_ptr);
 int new_FuncType(const Vector *args,
@@ -57,6 +60,7 @@ int GetType_Return    (const void*, const Map*, VarType**);
 int GetType_Expression(const void*, const Map*, VarType**);
 int GetType_Ref       (const void*, const Map*, VarType**);
 int GetType_Paren     (const void*, const Map*, VarType**);
+int GetType_Call      (const void*, const Map*, VarType**);
 int GetType_Variable  (const void*, const Map*, VarType**);
 int GetType_TypedVar  (const void*, const Map*, VarType**);
 int GetType_Int       (const void*, const Map*, VarType**);

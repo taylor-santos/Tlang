@@ -80,6 +80,11 @@ static int vector_array(const Vector *this, int *size, const void *array_ptr) {
         return 1;
     }
     struct vector_data *data = this->data;
+    if (data->size == 0) {
+        *size = 0;
+        *(const void**)array_ptr = NULL;
+        return 0;
+    }
     void *values = malloc(data->size * sizeof(const void*));
     if (values == NULL) {
         return 1;

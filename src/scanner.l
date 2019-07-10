@@ -106,7 +106,7 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
             case RETURN:
                 printf("RETURN\n");
                 return 1;
-            case T_REF:
+            case REF:
                 printf("REF\n");
                 return 1;
             case ARROW:
@@ -217,7 +217,8 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
 
     func    { push_token((Token){.type=FUNC}); }
     return  { push_token((Token){.type=RETURN}); }
-    def     { push_token((Token){.type=T_REF}); }
+    ref     { push_token((Token){.type=REF}); }
+    call    { push_token((Token){.type=CALL}); }
     ->      { push_token((Token){.type=ARROW}); }
     [+\-*/] { push_token((Token){.type=IDENT, .value.str_val=strdup(yytext)}); }
 

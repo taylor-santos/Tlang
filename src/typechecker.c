@@ -5,7 +5,7 @@
 #include "safe.h"
 
 static GetTypeState *state;
-static int ref_depth = 0;
+static int in_ref;
 static const Vector *assigned_vars; // Use this to store any variables that will
                                     // be assigned to an object with scope. They
                                     // will then be visible within that scope as
@@ -78,10 +78,15 @@ void free_VarType(void *this) {
         case NONE:
             free(this);
             return;
-        case REF:
+        case REFERENCE:
+            free(this);
+            return;
+        case CALLER:
             free(this);
             return;
     }
+    //TODO
+    fprintf(stderr, "error: VarType not handled in switch statement.\n");
 }
 
 void free_FuncType(void *this) {
@@ -140,7 +145,19 @@ int new_RefType(VarType **vartype_ptr) {
     if (*vartype_ptr == NULL) {
         return 1;
     }
-    (*vartype_ptr)->type = REF;
+    (*vartype_ptr)->type = REFERENCE;
+    return 0;
+}
+
+int new_CallType(VarType **vartype_ptr) {
+    if (vartype_ptr == NULL) {
+        return 1;
+    }
+    *vartype_ptr = malloc(sizeof(**vartype_ptr));
+    if (*vartype_ptr == NULL) {
+        return 1;
+    }
+    (*vartype_ptr)->type = CALLER;
     return 0;
 }
 
@@ -187,9 +204,6 @@ int new_FuncType(const Vector *args, VarType *ret_type, FuncType **functype_ptr)
 
 void print_VarType(const void *this) {
     const VarType *type = this;
-    if (type->init) {
-        printf("i: ");
-    }
     switch(type->type) {
         case BUILTIN:
             switch(type->builtin) {
@@ -230,8 +244,11 @@ void print_VarType(const void *this) {
         case NONE:
             printf("none");
             break;
-        case REF:
-            printf("ref ");
+        case REFERENCE:
+            printf("ref");
+            break;
+        case CALLER:
+            printf("call");
             break;
     }
 }
@@ -258,7 +275,9 @@ static int copy_VarType(const void *type, const void *copy_ptr) {
             break;
         case NONE:
             break;
-        case REF:
+        case REFERENCE:
+            break;
+        case CALLER:
             break;
     }
     (*VT_copy_ptr)->init = VT_type->init;
@@ -316,9 +335,11 @@ static int typecmp(const VarType *type1, const VarType *type2) {
             return funccmp(type1->function, type2->function);
         case NONE:
             return 0;
-        case REF:
+        case REFERENCE:
             return 1; //TODO: Should ref types be comparable? The caller should
                       //      probably handle checking the referenced type
+        case CALLER:
+            return 1;
     }
     fprintf(stderr, "%s:%d: " RED "internal compiler error: " WHITE "switch "
             "statement failed to cover all cases\n", __FILE__, __LINE__);
@@ -326,19 +347,23 @@ static int typecmp(const VarType *type1, const VarType *type2) {
 }
 
 static int funccmp(const FuncType *type1, const FuncType *type2) {
-    int size1, size2;
+    int size1, size2, ret = 0;
     NamedArg **arr1 = NULL, **arr2 = NULL;
     safe_method_call(type1->named_args, array, &size1, &arr1);
     safe_method_call(type2->named_args, array, &size2, &arr2);
     if (size1 != size2) {
-        return 1;
-    }
-    for (int i = 0; i < size1; i++) {
-        if (typecmp(arr1[i]->type, arr2[i]->type)) {
-            return 1;
+        ret = 1;
+    } else {
+        for (int i = 0; i < size1; i++) {
+            if (typecmp(arr1[i]->type, arr2[i]->type)) {
+                ret = 1;
+                break;
+            }
         }
     }
-    return typecmp(type1->ret_type, type2->ret_type);
+    free(arr1);
+    free(arr2);
+    return ret || typecmp(type1->ret_type, type2->ret_type);
 }
 
 int TypeCheck_Program(const void *this) {
@@ -347,6 +372,7 @@ int TypeCheck_Program(const void *this) {
     const Vector   *stmts = data->statements;
     if (state == NULL) {
         state = malloc(sizeof(*state));
+        state->expr_stack = new_Stack(0);
     }
     state->scope_type = NULL;
     int size = 0;
@@ -360,6 +386,7 @@ int TypeCheck_Program(const void *this) {
                    || errstate;
         print_Map(data->symbols, print_VarType);
     }
+    free(stmt_arr);
     print_Map(data->symbols, print_VarType);
     return errstate;
 }
@@ -423,6 +450,7 @@ int GetType_Return(UNUSED const void *this,
                     "return type\n");
             return 1;
         } else {
+            *type_ptr = data->type;
             return 0;
         }
     }
@@ -440,9 +468,9 @@ int GetType_Return(UNUSED const void *this,
             fprintf(stderr, "error: incompatible return type\n");
             return 1;
         }
+        *type_ptr = ret_type;
+        return 0;
     }
-    safe_function_call(new_NoneType, type_ptr);
-    return 0;
 }
 
 int parse_expression(const ASTNode **nodes,
@@ -467,19 +495,22 @@ int parse_expression(const ASTNode **nodes,
         case BUILTIN:
             expr_type = type;
             break;
-        case FUNCTION:
-            while (type->type == FUNCTION && ref_depth != 1) {
-                ref_depth--;
-                if (type->function->extension != NULL) {
+        case FUNCTION:;
+            if (type->function->extension != NULL) {
+                *type_ptr = type;
+                return 0;
+            }
+            int arg_count =
+                type->function->named_args->size(
+                    type->function->named_args);
+            // Don't implicitly call functions without args
+            if (in_ref == 0 && arg_count > 0) {
+                if (*index_ptr + arg_count > size) {
                     *type_ptr = type;
                     return 0;
                 }
-                int arg_count =
-                    type->function->named_args->size(
-                        type->function->named_args);
                 for (int i = 0; i < arg_count; i++) {
                     VarType *arg_type = NULL;
-                    int prev_ref_depth = ref_depth;
                     if (parse_expression(nodes,
                                          size,
                                          index_ptr,
@@ -488,12 +519,11 @@ int parse_expression(const ASTNode **nodes,
                                          1)) {
                         return 1;
                     }
-                    ref_depth = prev_ref_depth;
                     NamedArg *expected_arg = NULL;
                     safe_method_call(type->function->named_args,
-                                     get,
-                                     i,
-                                     &expected_arg);
+                        get,
+                        i,
+                        &expected_arg);
                     if (typecmp(arg_type, expected_arg->type)) {
                         //TODO: Handle incompatible argument type
                         fprintf(stderr,
@@ -508,15 +538,43 @@ int parse_expression(const ASTNode **nodes,
         case NONE:
             expr_type = type;
             break;
-        case REF:;
-            ASTRefData *ref_data = nodes[*index_ptr - 1]->data;
-            const ASTNode *ref_node = ref_data->val;
-            ASTStatementVTable *ref_vtable = ref_node->vtable;
-            ref_depth = 1;
-            if (ref_vtable->get_type(ref_node, symbols, &expr_type)) {
+        case REFERENCE:;
+            int prev_ref = in_ref;
+            in_ref = 1;
+            if (parse_expression(nodes,
+                                 size,
+                                 index_ptr,
+                                 symbols,
+                                 &expr_type,
+                                 1)) {
                 return 1;
             }
-            ref_depth = 0;
+
+            in_ref = prev_ref;
+            break;
+        case CALLER:
+            prev_ref = in_ref;
+            in_ref = 0;
+            if (parse_expression(nodes,
+                                 size,
+                                 index_ptr,
+                                 symbols,
+                                 &expr_type,
+                                 1)) {
+                return 1;
+            }
+            in_ref = prev_ref;
+            if (expr_type->type == FUNCTION) {
+                const Vector *args = expr_type->function->named_args;
+                int num_args = args->size(args);
+                if (num_args == 0) {
+                    expr_type = expr_type->function->ret_type;
+                    break;
+                }
+            }
+            //TODO: Handle warning incorrect 'call' usage
+            fprintf(stderr,
+                "warning: 'call' should only be used on nullary functions\n");
             break;
     }
     while (ret_first_type == 0 && *index_ptr < size) {
@@ -542,18 +600,18 @@ int parse_expression(const ASTNode **nodes,
                 for (int i = 0; i < arg_count; i++) {
                     VarType *arg_type = NULL;
                     if (parse_expression(nodes,
-                                         size,
-                                         index_ptr,
-                                         symbols,
-                                         &arg_type,
-                                         1)) {
+                        size,
+                        index_ptr,
+                        symbols,
+                        &arg_type,
+                        1)) {
                         return 1;
                     }
                     NamedArg *expected_arg = NULL;
                     safe_method_call(new_type->function->named_args,
-                                     get,
-                                     i,
-                                     &expected_arg);
+                        get,
+                        i,
+                        &expected_arg);
                     if (typecmp(arg_type, expected_arg->type)) {
                         //TODO: Handle incompatible argument type
                         fprintf(stderr,
@@ -562,6 +620,10 @@ int parse_expression(const ASTNode **nodes,
                     }
                 }
                 expr_type = new_type->function->ret_type;
+                if (expr_type->type == FUNCTION &&
+                    expr_type->function->extension != NULL) {
+                    break;
+                }
             }
         } else {
             //TODO: Handle dangling expression
@@ -586,11 +648,13 @@ int GetType_Expression(const void *this,
     int size = exprs->size(exprs);
     safe_method_call(exprs, array, &size, &nodes);
     int index = 0;
-    return parse_expression(nodes, size, &index, symbols, type_ptr, 0);
+    int result = parse_expression(nodes, size, &index, symbols, type_ptr, 0);
+    free(nodes);
+    return result;
 }
 
 int GetType_Ref(const void *this,
-                const Map *symbols,
+                UNUSED const Map *symbols,
                 VarType **type_ptr) {
     if (type_ptr == NULL) {
         return 1;
@@ -599,17 +663,6 @@ int GetType_Ref(const void *this,
     ASTRefData    *data = node->data;
     *type_ptr = data->type;
     return 0;
-    ref_depth = 1;
-    ASTStatementVTable *vtable = data->val->vtable;
-    VarType *new_type = NULL;
-    int result = vtable->get_type(data->val, symbols, &new_type);
-    print_VarType(new_type);
-    printf("\n");
-    print_VarType(data->type);
-    printf("\n");
-    *type_ptr = new_type;
-    ref_depth = 0;
-    return result;
 }
 
 int GetType_Paren(const void *this,
@@ -618,12 +671,24 @@ int GetType_Paren(const void *this,
     if (type_ptr == NULL) {
         return 1;
     }
-    const ASTNode *node = this;
-    ASTRefData    *data = node->data;
+    const ASTNode      *node   = this;
+    ASTParenData       *data   = node->data;
     ASTStatementVTable *vtable = data->val->vtable;
-    if (ref_depth != 0)
-        ref_depth++;
-    return vtable->get_type(data->val, symbols, type_ptr);
+    int prev_ref = in_ref;
+    in_ref = 0;
+    int result =  vtable->get_type(data->val, symbols, type_ptr);
+    in_ref = prev_ref;
+    return result;
+}
+
+int GetType_Call(UNUSED const void *this,
+                 UNUSED const Map *symbols,
+                 VarType **type_ptr) {
+    if (type_ptr == NULL) {
+        return 1;
+    }
+    safe_function_call(new_CallType, type_ptr);
+    return 0;
 }
 
 int GetType_Variable(const void *this, const Map *symbols, VarType **type_ptr) {
@@ -675,10 +740,9 @@ int GetType_Int(UNUSED const void *this,
     if (type_ptr == NULL) {
         return 1;
     }
-    *type_ptr = malloc(sizeof(**type_ptr));
-    (*type_ptr)->type = BUILTIN;
-    (*type_ptr)->builtin = INT;
-    (*type_ptr)->init = 1;
+    const ASTNode *node = this;
+    ASTIntData    *data = node->data;
+    *type_ptr = data->type;
     return 0;
 }
 
@@ -688,10 +752,9 @@ int GetType_Double(UNUSED const void *this,
     if (type_ptr == NULL) {
         return 1;
     }
-    *type_ptr = malloc(sizeof(**type_ptr));
-    (*type_ptr)->type = BUILTIN;
-    (*type_ptr)->builtin = DOUBLE;
-    (*type_ptr)->init = 1;
+    const ASTNode *node = this;
+    ASTDoubleData *data = node->data;
+    *type_ptr = data->type;
     return 0;
 }
 
@@ -757,6 +820,7 @@ int GetType_Function(const void *this,
             free_VarType(prev_type);
         }
     }
+    free(args);
     assigned_vars->clear(assigned_vars, NULL);
     VarType *prev_scope = state->scope_type;
 
@@ -770,6 +834,8 @@ int GetType_Function(const void *this,
         VarType *type = NULL;
         err = vtable->get_type(stmt_arr[i], data->symbols, &type) || err;
     }
+    free(stmt_arr);
+    if (err) return 1;
     state->scope_type = prev_scope;
     *type_ptr = data->type;
     return 0;

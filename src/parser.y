@@ -27,8 +27,8 @@
 %code requires {
     #include "ast.h"
     #include "vector.h"
-    #ifndef YY_TYPEDEF_YY_SCANNER_T
-    #define YY_TYPEDEF_YY_SCANNER_T
+    #ifndef YY_TYPEREF_YY_SCANNER_T
+    #define YY_TYPEREF_YY_SCANNER_T
     typedef void* yyscan_t;
     #endif
 }
@@ -49,12 +49,12 @@
     FuncType *func_type;
 }
 
-%token             INDENT OUTDENT ERROR NEWLINE FUNC RETURN T_REF ARROW
+%token             INDENT OUTDENT ERROR NEWLINE FUNC RETURN REF ARROW CALL
 %token<int_val>    INT_LIT
 %token<double_val> DOUBLE_LIT
 %token<str_val>    IDENT
 
-%type<ast>       file statement assignment l_value r_expr ref_expr expression
+%type<ast>       file statement l_value r_expr sub_expr expression
 %type<vec>       stmts opt_args args opt_named_args named_args call_list
 %type<var_type>  type_def
 %type<func_type> func_def named_func_def
@@ -91,11 +91,11 @@ statement:
         {
             $$ = new_TypedVarNode(&@$, $1, $3);
         }
-  | assignment NEWLINE
+  | expression NEWLINE
         {
             $$ = $1;
         }
-  | RETURN assignment NEWLINE
+  | RETURN expression NEWLINE
         {
             $$ = new_ReturnNode(&@$, $2);
         }
@@ -104,53 +104,44 @@ statement:
             $$ = new_ReturnNode(&@$, NULL);
         }
 
-assignment:
-    expression
-        {
-            $$ = $1;
-        }
-  | l_value '=' assignment
-        {
-            $$ = new_AssignmentNode(&@$, $1, $3);
-        }
-
 expression:
     call_list
         {
             $$ = new_ExpressionNode(&@$, $1);
         }
+  | l_value '=' expression
+        {
+            $$ = new_AssignmentNode(&@$, $1, $3);
+        }
 
 call_list:
-    ref_expr
+    sub_expr
         {
             $$ = new_Vector(0);
             safe_method_call($$, append, $1);
         }
-  | call_list ref_expr
+  | call_list sub_expr
         {
             $$ = $1;
             safe_method_call($$, append, $2);
         }
 
-ref_expr:
+sub_expr:
     r_expr
         {
             $$ = $1;
         }
   | '(' call_list ')'
         {
-
             $$ = new_ParenNode(&@$, new_ExpressionNode(&@$, $2));
         }
-  | T_REF r_expr
+  | CALL
         {
-            $$ = new_RefNode(&@$, $2);
+            $$ = new_CallNode(&@$);
         }
-  | T_REF '(' call_list ')'
+  | REF
         {
-            $$ = new_RefNode(&@$,
-                     new_ParenNode(&@$,
-                         new_ExpressionNode(&@$, $3)));
+            $$ = new_RefNode(&@$);
         }
 
 
@@ -211,9 +202,37 @@ func_def:
             const Vector *args = new_Vector(0);
             safe_function_call(new_FuncType, args, $3, &$$);
         }
+  | FUNC
+        {
+            const Vector *args = new_Vector(0);
+            VarType *none = NULL;
+            safe_function_call(new_NoneType, &none);
+            safe_function_call(new_FuncType, args, none, &$$);
+        }
   | '(' type_def ')' FUNC '(' opt_args ')' ARROW type_def
         {
             safe_function_call(new_FuncType, $6, $9, &$$);
+            safe_function_call(new_NamedArg, NULL, $2, &$$->extension);
+        }
+  | '(' type_def ')' FUNC '(' opt_args ')'
+        {
+            VarType *none = NULL;
+            safe_function_call(new_NoneType, &none);
+            safe_function_call(new_FuncType, $6, none, &$$);
+            safe_function_call(new_NamedArg, NULL, $2, &$$->extension);
+        }
+  | '(' type_def ')' FUNC ARROW type_def
+        {
+            const Vector *args = new_Vector(0);
+            safe_function_call(new_FuncType, args, $6, &$$);
+            safe_function_call(new_NamedArg, NULL, $2, &$$->extension);
+        }
+  | '(' type_def ')' FUNC
+        {
+            const Vector *args = new_Vector(0);
+            VarType *none = NULL;
+            safe_function_call(new_NoneType, &none);
+            safe_function_call(new_FuncType, args, none, &$$);
             safe_function_call(new_NamedArg, NULL, $2, &$$->extension);
         }
 
