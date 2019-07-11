@@ -6,6 +6,7 @@
 
 static GetTypeState *state;
 static int in_ref;
+static int in_paren;
 static const Vector *assigned_vars; // Use this to store any variables that will
                                     // be assigned to an object with scope. They
                                     // will then be visible within that scope as
@@ -384,7 +385,6 @@ int TypeCheck_Program(const void *this) {
         VarType *type = NULL;
         errstate = vtable->get_type(stmt_arr[i], data->symbols, &type)
                    || errstate;
-        print_Map(data->symbols, print_VarType);
     }
     free(stmt_arr);
     print_Map(data->symbols, print_VarType);
@@ -486,9 +486,18 @@ int parse_expression(const ASTNode **nodes,
     }
     ASTStatementVTable *vtable = nodes[*index_ptr]->vtable;
     VarType* type = NULL;
+    int prev_paren = in_paren;
+    in_paren = 0;
     if (vtable->get_type(nodes[*index_ptr], symbols, &type)) {
         return 1;
     }
+    if (in_paren) {
+        in_paren = prev_paren;
+        (*index_ptr)++;
+        *type_ptr = type;
+        return 0;
+    }
+    in_paren = prev_paren;
     (*index_ptr)++;
     VarType *expr_type = NULL;
     switch (type->type) {
@@ -649,6 +658,11 @@ int GetType_Expression(const void *this,
     safe_method_call(exprs, array, &size, &nodes);
     int index = 0;
     int result = parse_expression(nodes, size, &index, symbols, type_ptr, 0);
+    if (index < size) {
+        //TODO: Handle dangling expression
+        fprintf(stderr, "error: dangling expression\n");
+        return 1;
+    }
     free(nodes);
     return result;
 }
@@ -676,6 +690,7 @@ int GetType_Paren(const void *this,
     ASTStatementVTable *vtable = data->val->vtable;
     int prev_ref = in_ref;
     in_ref = 0;
+    in_paren = 1;
     int result =  vtable->get_type(data->val, symbols, type_ptr);
     in_ref = prev_ref;
     return result;

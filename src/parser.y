@@ -6,7 +6,7 @@
     #include "Tlang_scanner.h"
     #include "safe.h"
 
-    #define YYERROR_VERBOSE
+    #define YY_ERROR_VERBOSE
     #define ERROR   RED "error: " WHITE
 
     void yyerror(YYLTYPE *locp,
@@ -27,13 +27,15 @@
 %code requires {
     #include "ast.h"
     #include "vector.h"
-    #ifndef YY_TYPEREF_YY_SCANNER_T
-    #define YY_TYPEREF_YY_SCANNER_T
+    #ifndef YY_TYPET_REF_YY_SCANNER_T
+    #define YY_TYPET_REF_YY_SCANNER_T
     typedef void* yyscan_t;
     #endif
 }
 
 %define api.pure full
+%define parse.error verbose
+%define parse.lac full
 %locations
 %parse-param { const ASTNode **root }
 %param { const char *filename } { yyscan_t scanner }
@@ -49,16 +51,17 @@
     FuncType *func_type;
 }
 
-%token             INDENT OUTDENT ERROR NEWLINE FUNC RETURN REF ARROW CALL
-%token<int_val>    INT_LIT
-%token<double_val> DOUBLE_LIT
-%token<str_val>    IDENT
+%token             T_INDENT T_OUTDENT T_ERROR T_NEWLINE T_FUNC T_RETURN T_REF
+                   T_ARROW T_CALL T_CLASS
+%token<int_val>    T_INT
+%token<double_val> T_DOUBLE
+%token<str_val>    T_IDENT
 
 %type<ast>       file statement l_value r_expr sub_expr expression
 %type<vec>       stmts opt_args args opt_named_args named_args call_list
-%type<var_type>  type_def
+%type<var_type>  type_def opt_return_type
 %type<func_type> func_def named_func_def
-%type<named_arg> named_type_def
+%type<named_arg> named_type_def opt_extension opt_named_extension
 
 %start file
 
@@ -87,19 +90,19 @@ stmts:
         }
 
 statement:
-    IDENT ';' type_def NEWLINE
+    T_IDENT ';' type_def T_NEWLINE
         {
             $$ = new_TypedVarNode(&@$, $1, $3);
         }
-  | expression NEWLINE
+  | expression T_NEWLINE
         {
             $$ = $1;
         }
-  | RETURN expression NEWLINE
+  | T_RETURN expression T_NEWLINE
         {
             $$ = new_ReturnNode(&@$, $2);
         }
-  | RETURN NEWLINE
+  | T_RETURN T_NEWLINE
         {
             $$ = new_ReturnNode(&@$, NULL);
         }
@@ -135,24 +138,23 @@ sub_expr:
         {
             $$ = new_ParenNode(&@$, new_ExpressionNode(&@$, $2));
         }
-  | CALL
+  | T_CALL
         {
             $$ = new_CallNode(&@$);
         }
-  | REF
+  | T_REF
         {
             $$ = new_RefNode(&@$);
         }
 
-
 l_value:
-    IDENT
+    T_IDENT
         {
             $$ = new_VariableNode(&@$, $1);
         }
 
 type_def:
-    IDENT
+    T_IDENT
         {
             safe_function_call(new_VarType, $1, &$$);
             free($1);
@@ -163,128 +165,26 @@ type_def:
         }
         
 named_func_def:
-    FUNC '(' opt_named_args ')' ARROW type_def
+    T_FUNC opt_named_args opt_return_type
         {
-            safe_function_call(new_FuncType, $3, $6, &$$);
-        }
-  | FUNC '(' opt_named_args ')'
-        {
-            VarType *none = NULL;
-            safe_function_call(new_NoneType, &none);
-            safe_function_call(new_FuncType, $3, none, &$$);
-        }
-  | FUNC ARROW type_def
-        {
-            const Vector *args = new_Vector(0);
-            safe_function_call(new_FuncType, args, $3, &$$);
-        }
-  | FUNC
-        {
-            const Vector *args = new_Vector(0);
-            VarType *none = NULL;
-            safe_function_call(new_NoneType, &none);
-            safe_function_call(new_FuncType, args, none, &$$);
+            safe_function_call(new_FuncType, $2, $3, &$$);
         }
 
 func_def:
-    FUNC '(' opt_args ')' ARROW type_def
+    opt_extension T_FUNC opt_args opt_return_type
         {
-            safe_function_call(new_FuncType, $3, $6, &$$);
-        }
-  | FUNC '(' opt_args ')'
-        {
-            VarType *none = NULL;
-            safe_function_call(new_NoneType, &none);
-            safe_function_call(new_FuncType, $3, none, &$$);
-        }
-  | FUNC ARROW type_def
-        {
-            const Vector *args = new_Vector(0);
-            safe_function_call(new_FuncType, args, $3, &$$);
-        }
-  | FUNC
-        {
-            const Vector *args = new_Vector(0);
-            VarType *none = NULL;
-            safe_function_call(new_NoneType, &none);
-            safe_function_call(new_FuncType, args, none, &$$);
-        }
-  | '(' type_def ')' FUNC '(' opt_args ')' ARROW type_def
-        {
-            safe_function_call(new_FuncType, $6, $9, &$$);
-            safe_function_call(new_NamedArg, NULL, $2, &$$->extension);
-        }
-  | '(' type_def ')' FUNC '(' opt_args ')'
-        {
-            VarType *none = NULL;
-            safe_function_call(new_NoneType, &none);
-            safe_function_call(new_FuncType, $6, none, &$$);
-            safe_function_call(new_NamedArg, NULL, $2, &$$->extension);
-        }
-  | '(' type_def ')' FUNC ARROW type_def
-        {
-            const Vector *args = new_Vector(0);
-            safe_function_call(new_FuncType, args, $6, &$$);
-            safe_function_call(new_NamedArg, NULL, $2, &$$->extension);
-        }
-  | '(' type_def ')' FUNC
-        {
-            const Vector *args = new_Vector(0);
-            VarType *none = NULL;
-            safe_function_call(new_NoneType, &none);
-            safe_function_call(new_FuncType, args, none, &$$);
-            safe_function_call(new_NamedArg, NULL, $2, &$$->extension);
+            safe_function_call(new_FuncType, $3, $4, &$$);
+            $$->extension = $1;
         }
 
-r_expr:
-    l_value
-        {
-            $$ = $1;
-        }
-  | INT_LIT
-        {
-            $$ = new_IntNode(&@$, $1);
-        }
-  | DOUBLE_LIT
-        {
-            $$ = new_DoubleNode(&@$, $1);
-        }
-  | named_func_def NEWLINE INDENT stmts OUTDENT
-        {
-            $$ = new_FunctionNode(&@$, $1, $4);
-        }
-  | '(' IDENT ':' type_def ')' named_func_def NEWLINE INDENT stmts OUTDENT
-        {
-            safe_function_call(new_NamedArg, $2, $4, &$6->extension);
-            $$ = new_FunctionNode(&@$, $6, $9);
-        }
-
-opt_named_args:
+opt_extension:
     %empty
         {
-            $$ = new_Vector(0);
+            $$ = NULL;
         }
-  | named_args
+  | '(' type_def ')'
         {
-            $$ = $1;
-        }
-
-named_args:
-    named_type_def
-        {
-            $$ = new_Vector(0);
-            safe_method_call($$, append, $1);
-        }
-  | named_args ',' named_type_def
-        {
-            $$ = $1;
-            safe_method_call($$, append, $3);
-        }
-
-named_type_def:
-    IDENT ':' type_def
-        {
-            safe_function_call(new_NamedArg, $1, $3, &$$);
+            safe_function_call(new_NamedArg, NULL, $2, &$$);
         }
 
 opt_args:
@@ -292,9 +192,9 @@ opt_args:
         {
             $$ = new_Vector(0);
         }
-  | args
+  | '(' args ')'
         {
-            $$ = $1;
+            $$ = $2;
         }
 
 args:
@@ -322,6 +222,73 @@ args:
               $$ = $1;
               safe_method_call($$, append, $3);
           }
+
+opt_return_type:
+    %empty
+        {
+            safe_function_call(new_NoneType, &$$);
+        }
+  | T_ARROW type_def
+        {
+            $$ = $2;
+        }
+
+r_expr:
+    l_value
+        {
+            $$ = $1;
+        }
+  | T_INT
+        {
+            $$ = new_IntNode(&@$, $1);
+        }
+  | T_DOUBLE
+        {
+            $$ = new_DoubleNode(&@$, $1);
+        }
+  | opt_named_extension named_func_def T_NEWLINE T_INDENT stmts T_OUTDENT
+        {
+            $2->extension = $1;
+            $$ = new_FunctionNode(&@$, $2, $5);
+        }
+
+opt_named_extension:
+    %empty
+        {
+            $$ = NULL;
+        }
+  | '(' T_IDENT ':' type_def ')'
+        {
+            safe_function_call(new_NamedArg, $2, $4, &$$);
+        }
+
+opt_named_args:
+    %empty
+        {
+            $$ = new_Vector(0);
+        }
+  | '(' named_args ')'
+        {
+            $$ = $2;
+        }
+
+named_args:
+    named_type_def
+        {
+            $$ = new_Vector(0);
+            safe_method_call($$, append, $1);
+        }
+  | named_args ',' named_type_def
+        {
+            $$ = $1;
+            safe_method_call($$, append, $3);
+        }
+
+named_type_def:
+    T_IDENT ':' type_def
+        {
+            safe_function_call(new_NamedArg, $1, $3, &$$);
+        }
 
 %%
 
