@@ -7,6 +7,8 @@
     #include "safe.h"
 
     #define YY_ERROR_VERBOSE
+    // Uncomment the following line to enable Bison debug tracing
+    // int yydebug = 1;
     #define ERROR   RED "error: " WHITE
 
     void yyerror(YYLTYPE *locp,
@@ -36,6 +38,7 @@
 %define api.pure full
 %define parse.error verbose
 %define parse.lac full
+%define parse.trace
 %locations
 %parse-param { const ASTNode **root }
 %param { const char *filename } { yyscan_t scanner }
@@ -59,6 +62,7 @@
 
 %type<ast>       file statement l_value r_expr sub_expr expression
 %type<vec>       stmts opt_args args opt_named_args named_args call_list
+                 opt_inheritance inheritance opt_stmts
 %type<var_type>  type_def opt_return_type
 %type<func_type> func_def named_func_def
 %type<named_arg> named_type_def opt_extension opt_named_extension
@@ -90,15 +94,15 @@ stmts:
         }
 
 statement:
-    T_IDENT ';' type_def T_NEWLINE
+    T_IDENT ':' type_def T_NEWLINE
         {
             $$ = new_TypedVarNode(&@$, $1, $3);
         }
-  | expression T_NEWLINE
+  | expression
         {
             $$ = $1;
         }
-  | T_RETURN expression T_NEWLINE
+  | T_RETURN expression
         {
             $$ = new_ReturnNode(&@$, $2);
         }
@@ -108,13 +112,32 @@ statement:
         }
 
 expression:
-    call_list
+    call_list T_NEWLINE
         {
             $$ = new_ExpressionNode(&@$, $1);
+        }
+  | opt_named_extension named_func_def opt_stmts
+        {
+            $2->extension = $1;
+            $$ = new_FunctionNode(&@$, $2, $3);
+        }
+  | T_CLASS opt_inheritance opt_stmts
+        {
+            $$ = new_ClassNode(&@$, $2, $3);
         }
   | l_value '=' expression
         {
             $$ = new_AssignmentNode(&@$, $1, $3);
+        }
+
+opt_stmts:
+    T_NEWLINE
+        {
+            $$ = new_Vector(0);
+        }
+  | T_NEWLINE T_INDENT stmts T_OUTDENT T_NEWLINE
+        {
+            $$ = $3;
         }
 
 call_list:
@@ -158,6 +181,10 @@ type_def:
         {
             safe_function_call(new_VarType, $1, &$$);
             free($1);
+        }
+  | T_CLASS
+        {
+            safe_function_call(new_ClassType, &$$);
         }
   | func_def
         {
@@ -246,11 +273,6 @@ r_expr:
         {
             $$ = new_DoubleNode(&@$, $1);
         }
-  | opt_named_extension named_func_def T_NEWLINE T_INDENT stmts T_OUTDENT
-        {
-            $2->extension = $1;
-            $$ = new_FunctionNode(&@$, $2, $5);
-        }
 
 opt_named_extension:
     %empty
@@ -288,6 +310,28 @@ named_type_def:
     T_IDENT ':' type_def
         {
             safe_function_call(new_NamedArg, $1, $3, &$$);
+        }
+
+opt_inheritance:
+    %empty
+        {
+            $$ = new_Vector(0);
+        }
+  | ':' inheritance
+        {
+            $$ = $2;
+        }
+
+inheritance:
+    T_IDENT
+        {
+            $$ = new_Vector(0);
+            safe_method_call($$, append, $1);
+        }
+  | inheritance ',' T_IDENT
+        {
+            $$ = $1;
+            safe_method_call($$, append, $3);
         }
 
 %%

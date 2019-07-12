@@ -67,22 +67,18 @@ int add_builtins(const Map *map) {
 }
 
 void free_VarType(void *this) {
+    if (this == NULL) return;
     VarType *type = this;
     switch(type->type) {
-        case BUILTIN:
-            free(this);
-            return;
         case FUNCTION:
             free_FuncType(type->function);
             free(this);
             return;
+        case BUILTIN:
         case NONE:
-            free(this);
-            return;
         case REFERENCE:
-            free(this);
-            return;
         case CALLER:
+        case CLASS:
             free(this);
             return;
     }
@@ -159,6 +155,18 @@ int new_CallType(VarType **vartype_ptr) {
         return 1;
     }
     (*vartype_ptr)->type = CALLER;
+    return 0;
+}
+
+int new_ClassType(VarType **vartype_ptr) {
+    if (vartype_ptr == NULL) {
+        return 1;
+    }
+    *vartype_ptr = malloc(sizeof(**vartype_ptr));
+    if (*vartype_ptr == NULL) {
+        return 1;
+    }
+    (*vartype_ptr)->type = CLASS;
     return 0;
 }
 
@@ -251,6 +259,9 @@ void print_VarType(const void *this) {
         case CALLER:
             printf("call");
             break;
+        case CLASS:
+            printf("class");
+            break;
     }
 }
 
@@ -279,6 +290,8 @@ static int copy_VarType(const void *type, const void *copy_ptr) {
         case REFERENCE:
             break;
         case CALLER:
+            break;
+        case CLASS:
             break;
     }
     (*VT_copy_ptr)->init = VT_type->init;
@@ -337,10 +350,11 @@ static int typecmp(const VarType *type1, const VarType *type2) {
         case NONE:
             return 0;
         case REFERENCE:
-            return 1; //TODO: Should ref types be comparable? The caller should
-                      //      probably handle checking the referenced type
+            return 1;
         case CALLER:
             return 1;
+        case CLASS:
+            return 0;
     }
     fprintf(stderr, "%s:%d: " RED "internal compiler error: " WHITE "switch "
             "statement failed to cover all cases\n", __FILE__, __LINE__);
@@ -585,6 +599,9 @@ int parse_expression(const ASTNode **nodes,
             fprintf(stderr,
                 "warning: 'call' should only be used on nullary functions\n");
             break;
+        case CLASS:
+            *type_ptr = type;
+            return 0;
     }
     while (ret_first_type == 0 && *index_ptr < size) {
         VarType *new_type;
@@ -852,6 +869,18 @@ int GetType_Function(const void *this,
     free(stmt_arr);
     if (err) return 1;
     state->scope_type = prev_scope;
+    *type_ptr = data->type;
+    return 0;
+}
+
+int GetType_Class(const void *this,
+                  UNUSED const Map *symbols,
+                  VarType **type_ptr) {
+    if (type_ptr == NULL) {
+        return 1;
+    }
+    const ASTNode *node = this;
+    ASTClassData  *data = node->data;
     *type_ptr = data->type;
     return 0;
 }

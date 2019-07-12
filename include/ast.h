@@ -206,6 +206,25 @@ const ASTNode *new_FunctionNode(struct YYLTYPE *loc,
                                 const Vector *stmts);
 
 
+/* Class Node < RExpr Node */
+typedef struct ast_class_data   ASTClassData;
+typedef struct ast_class_vtable ASTClassVTable;
+struct ast_class_data {
+    struct YYLTYPE *loc;
+    VarType        *type;
+    const Vector   *inheritance;
+    const Vector   *stmts;
+};
+struct ast_class_vtable {
+    void (*free)    (const void*);
+    void (*json)    (const void*, int, FILE*);
+    int  (*get_type)(const void*, const Map*, VarType**);
+};
+const ASTNode *new_ClassNode(struct YYLTYPE *loc,
+                             const Vector *inheritance,
+                             const Vector *stmts);
+
+
 /* Int Node < LExpr Node */
 typedef struct ast_int_data   ASTIntData;
 typedef struct ast_int_vtable ASTIntVTable;
