@@ -27,4 +27,5 @@ add_executable(tcc
         src/map.c
         src/ast.c
         src/typechecker.c
+        src/codegen.c
 )

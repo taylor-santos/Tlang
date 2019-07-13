@@ -14,6 +14,7 @@ struct map {
     int  (*get)     (const Map*, const void*, size_t, const void*);
     int  (*contains)(const Map*, const void*, size_t);
     int  (*copy)    (const Map*, const Map**, int(*)(const void*, const void*));
+    int  (*keys)    (const Map*, int*, size_t**, const void*);
     void (*free)    (const Map*, void (*)(void*));
 };
 

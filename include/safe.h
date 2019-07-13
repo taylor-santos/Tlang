@@ -29,5 +29,22 @@
     } \
     void safe_function_call()
 
+#define safe_fprintf(out, ...) { \
+        if (fprintf(out, __VA_ARGS__) < 0) { \
+            print_ICE("file printing failed"); \
+            fclose(out); \
+            exit(EXIT_FAILURE); \
+        } \
+    } \
+    void safe_fprintf()
+
+#define safe_vfprintf(out, fmt, args) { \
+        if (vfprintf(out, fmt, args) < 0) { \
+            print_ICE("file printing failed"); \
+            fclose(out); \
+            exit(EXIT_FAILURE); \
+        } \
+    } \
+    void safe_vfprintf()
 
 #endif//SAFE_H

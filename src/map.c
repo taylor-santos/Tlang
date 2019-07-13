@@ -227,6 +227,41 @@ int map_copy(const Map *this,
     return 0;
 }
 
+int map_keys(const Map *this,
+             int *count,
+             size_t **lengths,
+             const void *array_ptr) {
+    if (array_ptr == NULL || lengths == NULL || count == NULL) {
+        return 1;
+    }
+    Data *data = this->data;
+    *count = data->size;
+    if (data->size == 0) {
+        *lengths = NULL;
+        return 0;
+    }
+    *lengths = malloc(data->size * sizeof(**lengths));
+    if (*lengths == NULL) {
+        return 1;
+    }
+    void ***arr = (void***)array_ptr;
+    *arr = malloc(data->size * sizeof(*arr));
+    if (*arr == NULL) {
+        free(lengths);
+        return 1;
+    }
+    int curr_index = 0;
+    for (size_t i = 0; i < data->capacity; i++) {
+        for (Entry *curr = data->entries[i]; curr != NULL; curr = curr->next) {
+            (*lengths)[curr_index] = curr->len;
+            (*arr)[curr_index] = malloc(curr->len);
+            memcpy((*arr)[curr_index], curr->key, curr->len);
+            curr_index++;
+        }
+    }
+    return 0;
+}
+
 void map_free(const Map *this, void (*val_free)(void*)) {
     Data *data = this->data;
     for (size_t i = 0; i < data->capacity; i++) {
@@ -271,6 +306,7 @@ const Map *new_Map(size_t capacity, double load_factor) {
     m->get      = map_get;
     m->contains = map_contains;
     m->copy     = map_copy;
+    m->keys     = map_keys;
     m->free     = map_free;
     return m;
 

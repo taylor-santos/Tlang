@@ -4,7 +4,8 @@
 #include "ast.h"
 #include "safe.h"
 
-static GetTypeState *state;
+static VarType state;
+static const ASTNode *in_class;
 static int in_ref;
 static int in_paren;
 static const Vector *assigned_vars; // Use this to store any variables that will
@@ -51,7 +52,6 @@ int add_builtins(const Map *map) {
             &func->extension);
         VarType *func_type = NULL;
         safe_function_call(new_VarType_from_FuncType, func, &func_type);
-        func_type->init = 1;
         VarType *prev_type = NULL;
         safe_method_call(map,
                          put,
@@ -106,13 +106,11 @@ void free_NamedArg(void *this) {
 int new_VarType(const char *type, VarType **vartype_ptr) {
     if (strcmp(type, "int") == 0) {
         *vartype_ptr = malloc(sizeof(**vartype_ptr));
-        (*vartype_ptr)->init = 0;
         (*vartype_ptr)->type = BUILTIN;
         (*vartype_ptr)->builtin = INT;
         return 0;
     } else if (strcmp(type, "double") == 0) {
         *vartype_ptr = malloc(sizeof(**vartype_ptr));
-        (*vartype_ptr)->init = 0;
         (*vartype_ptr)->type = BUILTIN;
         (*vartype_ptr)->builtin = DOUBLE;
         return 0;
@@ -206,7 +204,6 @@ int new_FuncType(const Vector *args, VarType *ret_type, FuncType **functype_ptr)
     }
     (*functype_ptr)->named_args = args;
     (*functype_ptr)->ret_type  = ret_type;
-    (*functype_ptr)->ret_type->init = 1;
     (*functype_ptr)->extension = NULL;
     return 0;
 }
@@ -294,7 +291,6 @@ static int copy_VarType(const void *type, const void *copy_ptr) {
         case CLASS:
             break;
     }
-    (*VT_copy_ptr)->init = VT_type->init;
     return 0;
 }
 
@@ -385,11 +381,7 @@ int TypeCheck_Program(const void *this) {
     const ASTNode  *node  = this;
     ASTProgramData *data  = node->data;
     const Vector   *stmts = data->statements;
-    if (state == NULL) {
-        state = malloc(sizeof(*state));
-        state->expr_stack = new_Stack(0);
-    }
-    state->scope_type = NULL;
+    state.type = NONE;
     int size = 0;
     ASTNode **stmt_arr = NULL;
     safe_method_call(stmts, array, &size, &stmt_arr);
@@ -401,7 +393,6 @@ int TypeCheck_Program(const void *this) {
                    || errstate;
     }
     free(stmt_arr);
-    print_Map(data->symbols, print_VarType);
     return errstate;
 }
 
@@ -428,11 +419,6 @@ int GetType_Assignment(const void *this,
     if (*type_ptr == NULL) {
         return 1;
     }
-    if ((*type_ptr)->init == 0) {
-        //TODO: Handle use before init error
-        fprintf(stderr, "error: use before init\n");
-        return 1;
-    }
     if (lhs_vtable->assign_type(lhs, *type_ptr, symbols)) {
         //TODO: Handle type reassignment error
         fprintf(stderr, "error: type reassignment\n");
@@ -447,7 +433,7 @@ int GetType_Return(UNUSED const void *this,
     if (type_ptr == NULL) {
         return 1;
     }
-    if (state == NULL || state->scope_type->type != FUNCTION) {
+    if (state.type != FUNCTION) {
         //TODO: Handle return statement outside of function
         fprintf(stderr, "return statement outside of function\n");
         return 1;
@@ -457,7 +443,7 @@ int GetType_Return(UNUSED const void *this,
     const ASTNode *ret_expr = data->returns;
     if (ret_expr == NULL) {
         // Returns nothing
-        if (state->scope_type->function->ret_type->type != NONE) {
+        if (state.function->ret_type->type != NONE) {
             //TODO: Handle incompatible return type
             fprintf(stderr,
                     "error: returning nothing from a function that expects a "
@@ -475,7 +461,7 @@ int GetType_Return(UNUSED const void *this,
         fprintf(stderr, "error: failed to infer type of returned value\n");
         return 1;
     } else {
-        FuncType *func_type = state->scope_type->function;
+        FuncType *func_type = state.function;
         // Compare stated return type of function to type of return statement
         if (typecmp(func_type->ret_type, ret_type)) {
             //TODO: Handle incompatible return statement to function return type
@@ -854,12 +840,11 @@ int GetType_Function(const void *this,
     }
     free(args);
     assigned_vars->clear(assigned_vars, NULL);
-    VarType *prev_scope = state->scope_type;
-
+    VarType prev_scope = state;
     int size = 0;
     ASTNode **stmt_arr = NULL;
     safe_method_call(data->stmts, array, &size, &stmt_arr);
-    state->scope_type = data->type;
+    state = *data->type;
     int err = 0;
     for (int i = 0; i < size; i++) {
         ASTStatementVTable *vtable = stmt_arr[i]->vtable;
@@ -868,7 +853,7 @@ int GetType_Function(const void *this,
     }
     free(stmt_arr);
     if (err) return 1;
-    state->scope_type = prev_scope;
+    state = prev_scope;
     *type_ptr = data->type;
     return 0;
 }
@@ -881,6 +866,37 @@ int GetType_Class(const void *this,
     }
     const ASTNode *node = this;
     ASTClassData  *data = node->data;
+    data->symbols->free(data->symbols, free_VarType);
+    safe_method_call(symbols, copy, &data->symbols, copy_VarType);
+    for (int i = 0; i < assigned_vars->size(assigned_vars); i++) {
+        char *var = NULL;
+        safe_method_call(assigned_vars, get, i, &var);
+        size_t len = strlen(var);
+        VarType *type_copy = NULL;
+        safe_function_call(copy_VarType, data->type, &type_copy);
+        VarType *prev_type = NULL;
+        safe_method_call(data->symbols, put, var, len, type_copy, &prev_type);
+        if (prev_type != NULL) {
+            //TODO: Verify type compatibility
+            fprintf(stderr, "Possible type conflict???\n");
+            free_VarType(prev_type);
+        }
+    }
+    const Vector  *stmts = data->stmts;
+    int size = 0;
+    ASTNode **stmt_arr = NULL;
+    safe_method_call(stmts, array, &size, &stmt_arr);
+    const ASTNode *prev_class = in_class;
+    in_class = node;
+    int errstate = 0;
+    for (int i = 0; i < size; i++) {
+        ASTStatementVTable *vtable = stmt_arr[i]->vtable;
+        VarType *type = NULL;
+        errstate = vtable->get_type(stmt_arr[i], data->symbols, &type)
+            || errstate;
+    }
+    free(stmt_arr);
+    in_class = prev_class;
     *type_ptr = data->type;
     return 0;
 }
@@ -889,38 +905,59 @@ int AssignType_Variable(const void *this, VarType *type, const Map *symbols) {
     const ASTNode   *node = this;
     ASTVariableData *data = node->data;
     size_t len = strlen(data->name);
+    VarType *put_type = NULL;
     if (symbols->contains(symbols, data->name, len)) {
-        VarType *prev_type = NULL;
-        safe_method_call(symbols, get, data->name, len, &prev_type);
-        if (typecmp(type, prev_type)) {
+        safe_method_call(symbols, get, data->name, len, &put_type);
+        if (typecmp(type, put_type)) {
             //TODO: Handle type mismatch error
             return 1;
         }
-        return 0;
     } else {
-        VarType *new_type = NULL;
-        safe_function_call(copy_VarType, type, &new_type);
-        safe_method_call(symbols, put, data->name, len, new_type, NULL);
-        return 0;
+        safe_function_call(copy_VarType, type, &put_type);
+        safe_method_call(symbols, put, data->name, len, put_type, NULL);
     }
+    data->type = put_type; // Store the inferred type for later
+    if (in_class != NULL) {
+        ASTClassData *class_data = in_class->data;
+        const Map *fields = class_data->fields;
+        VarType *prev_type = NULL;
+        safe_method_call(fields, put, data->name, len, put_type, &prev_type);
+        if (prev_type != NULL) {
+            //TODO: Handle field reassignment
+            fprintf(stderr, "error: multiple assignments to field");
+            return 1;
+        }
+    }
+    return 0;
 }
 
 int AssignType_TypedVar(const void *this, VarType *type, const Map *symbols) {
     const ASTNode   *node = this;
     ASTTypedVarData *data = node->data;
     size_t len = strlen(data->name);
-    VarType *prev_type = NULL;
+    VarType *put_type = NULL;
     // Before comparing, check if it's in the symbol table. Add it if not.
     if (symbols->contains(symbols, data->name, len)) {
-        safe_method_call(symbols, get, data->name, len, &prev_type);
+        safe_method_call(symbols, get, data->name, len, &put_type);
     } else {
-        safe_function_call(copy_VarType, type, &prev_type);
-        safe_method_call(symbols, put, data->name, len, prev_type, NULL);
+        safe_function_call(copy_VarType, type, &put_type);
+        safe_method_call(symbols, put, data->name, len, put_type, NULL);
     }
-    prev_type->init = 1;
-    if (typecmp(type, prev_type)) {
+    if (typecmp(type, put_type)) {
         //TODO: Handle type mismatch error
         return 1;
+    }
+    data->type = put_type; // Store the inferred type for later
+    if (in_class != NULL) {
+        ASTClassData *class_data = in_class->data;
+        const Map *fields = class_data->fields;
+        VarType *prev_type = NULL;
+        safe_method_call(fields, put, data->name, len, put_type, &prev_type);
+        if (prev_type != NULL) {
+            //TODO: Handle field reassignment
+            fprintf(stderr, "error: multiple assignments to field");
+            return 1;
+        }
     }
     return 0;
 }

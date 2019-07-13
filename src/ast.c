@@ -1,8 +1,9 @@
-#include "ast.h"
 #include <stdlib.h>
 #include <string.h>
+#include "ast.h"
 #include "Tlang_parser.h"
 #include "safe.h"
+#include "codegen.h"
 
 VarType *global_type;
 
@@ -27,63 +28,6 @@ static void json_ASTNode(const void *this, int indent, FILE *out) {
     const ASTNode *node = this;
     ASTNodeVTable *vtable = node->vtable;
     vtable->json(node, indent, out);
-}
-
-static void free_leaf(const void *this) {
-    if (this == NULL) return;
-    const ASTNode *node = this;
-    ASTNodeData *data = node->data;
-    free(data->loc);
-    free(node->data);
-    free(node->vtable);
-    free((void*)node);
-}
-
-static void json_leaf(const void *this, int indent, FILE *out) {
-    fprintf(out, "{\n");
-    indent++;
-    fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
-    fprintf(out, "\"type\": \"Leaf Node\",\n");
-    fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
-    const ASTNode *node = this;
-    ASTNodeData *data = node->data;
-    fprintf(out, "\"loc\": \"%d:%d-%d:%d\"", data->loc->first_line, 
-            data->loc->first_column, data->loc->last_line,
-        data->loc->last_column);
-    fprintf(out, "\n");
-    indent--;
-    fprintf(out, "%*s}", indent * JSON_TAB_WIDTH, "");
-}
-
-const ASTNode *new_LeafNode(struct YYLTYPE *loc) {
-    ASTNode *node = malloc(sizeof(*node));
-    if (node == NULL) {
-        return NULL;
-    }
-    ASTNodeData *data = malloc(sizeof(*data));
-    if (data == NULL) {
-        free(node);
-        return NULL;
-    }
-    node->data = data;
-    ASTNodeVTable *vtable = malloc(sizeof(*vtable));
-    if (vtable == NULL) {
-        free(node->data);
-        free(node);
-        return NULL;
-    }
-    node->vtable = vtable;
-    data->loc = malloc(sizeof(*loc));
-    if (data->loc == NULL) {
-        free(vtable);
-        free(data);
-        free(node);
-        return NULL;
-    }
-    memcpy(data->loc, loc, sizeof(*loc));
-    vtable->free = free_leaf;
-    vtable->json = json_leaf;
-    return node;
 }
 
 static void free_program(const void *this) {
@@ -148,10 +92,11 @@ const ASTNode *new_ProgramNode(struct YYLTYPE *loc, const Vector *statements) {
     else
         data->statements = new_Vector(0);
     data->symbols      = new_Map(0, 0);
-    safe_function_call(add_builtins, data->symbols);
+    // safe_function_call(add_builtins, data->symbols);
     vtable->free       = free_program;
     vtable->json       = json_program;
     vtable->type_check = TypeCheck_Program;
+    vtable->codegen    = CodeGen_Program;
     return node;
 }
 
@@ -227,6 +172,7 @@ const ASTNode *new_AssignmentNode(struct YYLTYPE *loc, const void *lhs,
     vtable->free     = free_assignment;
     vtable->json     = json_assignment;
     vtable->get_type = GetType_Assignment;
+    vtable->codegen  = CodeGen_Assignment;
     return node;
 }
 
@@ -302,6 +248,7 @@ const ASTNode *new_ReturnNode(struct YYLTYPE *loc, const void *value) {
     vtable->free     = free_return;
     vtable->json     = json_return;
     vtable->get_type = GetType_Return;
+    vtable->codegen  = CodeGen_Return;
     return node;
 }
 
@@ -366,6 +313,7 @@ const ASTNode *new_ExpressionNode(struct YYLTYPE *loc, const Vector *exprs) {
     vtable->free     = free_expression;
     vtable->json     = json_expression;
     vtable->get_type = GetType_Expression;
+    vtable->codegen  = CodeGen_Expression;
     return node;
 }
 
@@ -426,6 +374,7 @@ const ASTNode *new_RefNode(struct YYLTYPE *loc) {
     vtable->free     = free_ref;
     vtable->json     = json_ref;
     vtable->get_type = GetType_Ref;
+    vtable->codegen  = CodeGen_Ref;
     return node;
 }
 
@@ -490,6 +439,7 @@ const ASTNode *new_ParenNode(struct YYLTYPE *loc, const ASTNode *val) {
     vtable->free     = free_paren;
     vtable->json     = json_paren;
     vtable->get_type = GetType_Paren;
+    vtable->codegen  = CodeGen_Paren;
     return node;
 }
 
@@ -549,6 +499,7 @@ const ASTNode *new_CallNode(struct YYLTYPE *loc) {
     vtable->free     = free_call;
     vtable->json     = json_call;
     vtable->get_type = GetType_Call;
+    vtable->codegen  = CodeGen_Call;
     return node;
 }
 
@@ -623,11 +574,11 @@ const ASTNode *new_FunctionNode(struct YYLTYPE *loc,
     data->stmts = stmts;
     data->symbols = new_Map(0, 0);
     safe_function_call(new_VarType_from_FuncType, signature, &data->type);
-    data->type->init = 1;
     global_type = data->type;
     vtable->free =     free_function;
     vtable->json =     json_function;
     vtable->get_type = GetType_Function;
+    vtable->codegen  = CodeGen_Function;
     return node;
 }
 
@@ -638,6 +589,8 @@ static void free_class(const void *this) {
     free_VarType(data->type);
     data->inheritance->free(data->inheritance, free);
     data->stmts->free(data->stmts, free_ASTNode);
+    data->symbols->free(data->symbols, free_VarType);
+    data->fields->free(data->fields, free_VarType);
     free(data->loc);
     free(node->data);
     free(node->vtable);
@@ -697,11 +650,13 @@ const ASTNode *new_ClassNode(struct YYLTYPE *loc,
     memcpy(data->loc, loc, sizeof(*loc));
     data->inheritance = inheritance;
     data->stmts = stmts;
+    data->symbols = new_Map(0, 0);
+    data->fields = new_Map(0, 0);
     safe_function_call(new_ClassType, &data->type);
-    data->type->init = 1;
-    vtable->free =     free_class;
-    vtable->json =     json_class;
+    vtable->free     = free_class;
+    vtable->json     = json_class;
     vtable->get_type = GetType_Class;
+    vtable->codegen  = CodeGen_Class;
     return node;
 }
 
@@ -767,6 +722,7 @@ const ASTNode *new_VariableNode(struct YYLTYPE *loc, char *name) {
     vtable->get_type    = GetType_Variable;
     vtable->assign_type = AssignType_Variable;
     vtable->get_vars    = GetVars_Variable;
+    vtable->codegen     = CodeGen_Variable;
     return node;
 }
 
@@ -839,6 +795,7 @@ const ASTNode *new_TypedVarNode(struct YYLTYPE *loc,
     vtable->get_type    = GetType_TypedVar;
     vtable->assign_type = AssignType_TypedVar;
     vtable->get_vars    = GetVars_TypedVar;
+    vtable->codegen     = CodeGen_TypedVar;
     return node;
 }
 
@@ -899,10 +856,10 @@ const ASTNode *new_IntNode(struct YYLTYPE *loc, int val) {
     memcpy(data->loc, loc, sizeof(*loc));
     data->val = val;
     safe_function_call(new_VarType, "int", &data->type);
-    data->type->init = 1;
     vtable->free        = free_int;
     vtable->json        = json_int;
     vtable->get_type    = GetType_Int;
+    vtable->codegen     = CodeGen_Int;
     return node;
 }
 
@@ -963,10 +920,10 @@ const ASTNode *new_DoubleNode(struct YYLTYPE *loc, double val) {
     memcpy(data->loc, loc, sizeof(*loc));
     data->val = val;
     safe_function_call(new_VarType, "double", &data->type);
-    data->type->init = 1;
     vtable->free        = free_double;
     vtable->json        = json_double;
     vtable->get_type    = GetType_Double;
+    vtable->codegen     = CodeGen_Double;
     return node;
 }
 

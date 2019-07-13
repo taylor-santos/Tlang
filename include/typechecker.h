@@ -16,7 +16,6 @@ struct var_type {
         enum { INT, DOUBLE } builtin;
         FuncType *function;
     };
-    int init;
 };
 
 struct named_arg {
@@ -28,11 +27,6 @@ struct func_type {
     const Vector *named_args; // Vector<NamedArg*>
     VarType      *ret_type;
     NamedArg     *extension;
-};
-
-struct gettype_state {
-    VarType *scope_type;
-    const Stack *expr_stack;
 };
 
 int add_builtins(const Map*);

@@ -89,6 +89,7 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
         *lval = t->value;
         *loc  = t->loc;
         free(t);
+        /*
         switch(*type) {
             case T_NEWLINE:
                 printf("NEWLINE\n");
@@ -131,6 +132,7 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
                 return 1;
         }
         printf("LITERAL (%c)\n", *type);
+         */
         return 1;
     }
     return 0;

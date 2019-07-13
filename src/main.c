@@ -31,7 +31,7 @@ static char* options_help[] = {
 
 int main(int argc, char *argv[]) {
     int opt, opt_index, file_count, i, status = 0;
-    char *out_filename = "a.out", *err;
+    char *out_filename = NULL, *err;
     FILE **inputs, *output;
     yyscan_t scanner;
     YY_BUFFER_STATE state;
@@ -71,6 +71,20 @@ int main(int argc, char *argv[]) {
             status = 1;
         }
     }
+    if (out_filename != NULL) {
+        output = fopen(out_filename, "w");
+    } else {
+        output = stdout;
+    }
+    if (output == NULL) {
+        asprintf(&err,
+            ERROR "unable to open file '%s'",
+            argv[optind + i]
+        );
+        perror(err);
+        free(err);
+        status = 1;
+    }
     if (status) {
         exit(EXIT_FAILURE);
     }
@@ -92,7 +106,12 @@ int main(int argc, char *argv[]) {
             if (!vtable->type_check(AST)) {
                 //vtable->json(AST, 0, stdout);
                 //fprintf(stdout, "\n");
-                printf("Type checker passed successfully\n");
+                if (!vtable->codegen(AST, output)) {
+                } else {
+                    printf("Code generation failed!\n");
+                }
+            } else {
+                printf("Type checker failed!\n");
             }
 		    vtable->free(AST);
 	    }
@@ -105,7 +124,6 @@ int main(int argc, char *argv[]) {
     if (status) {
         exit(EXIT_FAILURE);
     }
-    output = fopen(out_filename, "w");
     if (output == NULL) {
         asprintf(&err, ERROR "unable to open file '%s'", out_filename);
         perror(err);

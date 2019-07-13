@@ -19,8 +19,9 @@ struct ast_node_data {
     struct YYLTYPE *loc;
 };
 struct ast_node_vtable {
-    void   (*free)(const void*);
-    void   (*json)(const void*, int, FILE*);
+    void   (*free)      (const void*);
+    void   (*json)      (const void*, int, FILE*);
+    int    (*codegen)   (const void*, FILE*);
 };
 void free_ASTNode(void*);
 
@@ -36,13 +37,10 @@ struct ast_program_data {
 struct ast_program_vtable {
     void (*free)      (const void*);
     void (*json)      (const void*, int, FILE*);
+    int  (*codegen)   (const void*, FILE*);
     int  (*type_check)(const void*);
 };
 const ASTNode *new_ProgramNode(struct YYLTYPE *loc, const Vector *statements);
-
-
-/* Leaf Node < AST Node*/
-const ASTNode *new_LeafNode(struct YYLTYPE *loc);
 
 
 /* Statement Node < AST Node */
@@ -55,6 +53,7 @@ struct ast_statement_data {
 struct ast_statement_vtable {
     void (*free)    (const void*);
     void (*json)    (const void*, int, FILE*);
+    int  (*codegen) (const void*, FILE*);
     int  (*get_type)(const void*, const Map*, VarType**);
 };
 
@@ -69,6 +68,7 @@ struct ast_r_expr_data {
 struct ast_r_expr_vtable {
     void (*free)    (const void*);
     void (*json)    (const void*, int, FILE*);
+    int  (*codegen) (const void*, FILE*);
     int  (*get_type)(const void*, const Map*, VarType**);
 };
 
@@ -85,6 +85,7 @@ struct ast_assignment_data {
 struct ast_assignment_vtable {
     void (*free)    (const void*);
     void (*json)    (const void*, int, FILE*);
+    int  (*codegen) (const void*, FILE*);
     int  (*get_type)(const void*, const Map*, VarType**);
 };
 const ASTNode *new_AssignmentNode(struct YYLTYPE *loc,
@@ -103,6 +104,7 @@ struct ast_return_data {
 struct ast_return_vtable {
     void (*free)    (const void*);
     void (*json)    (const void*, int, FILE*);
+    int  (*codegen) (const void*, FILE*);
     int  (*get_type)(const void*, const Map*, VarType**);
 };
 const ASTNode *new_ReturnNode(struct YYLTYPE *loc, const void *value);
@@ -119,6 +121,7 @@ struct ast_expression_data {
 struct ast_expression_vtable {
     void (*free)    (const void*);
     void (*json)    (const void*, int, FILE*);
+    int  (*codegen) (const void*, FILE*);
     int  (*get_type)(const void*, const Map*, VarType**);
 };
 const ASTNode *new_ExpressionNode(struct YYLTYPE *loc, const Vector *exprs);
@@ -134,6 +137,7 @@ struct ast_ref_data {
 struct ast_ref_vtable {
     void (*free)      (const void*);
     void (*json)      (const void*, int, FILE*);
+    int  (*codegen) (const void*, FILE*);
     int  (*get_type)(const void*, const Map*, VarType**);
 };
 const ASTNode *new_RefNode(struct YYLTYPE *loc);
@@ -150,6 +154,7 @@ struct ast_paren_data {
 struct ast_paren_vtable {
     void (*free)      (const void*);
     void (*json)      (const void*, int, FILE*);
+    int  (*codegen) (const void*, FILE*);
     int  (*get_type)(const void*, const Map*, VarType**);
 };
 const ASTNode *new_ParenNode(struct YYLTYPE *loc, const ASTNode *val);
@@ -165,6 +170,7 @@ struct ast_call_data {
 struct ast_call_vtable {
     void (*free)      (const void*);
     void (*json)      (const void*, int, FILE*);
+    int  (*codegen) (const void*, FILE*);
     int  (*get_type)(const void*, const Map*, VarType**);
 };
 const ASTNode *new_CallNode(struct YYLTYPE *loc);
@@ -180,6 +186,7 @@ struct ast_l_expr_data {
 struct ast_l_expr_vtable {
     void (*free)       (const void*);
     void (*json)       (const void*, int, FILE*);
+    int  (*codegen)    (const void*, FILE*);
     int  (*get_type)   (const void*, const Map*, VarType**);
     int  (*assign_type)(const void*, VarType*, const Map*);
     int  (*get_vars)   (const void*);
@@ -199,6 +206,7 @@ struct ast_function_data {
 struct ast_function_vtable {
     void (*free)    (const void*);
     void (*json)    (const void*, int, FILE*);
+    int  (*codegen) (const void*, FILE*);
     int  (*get_type)(const void*, const Map*, VarType**);
 };
 const ASTNode *new_FunctionNode(struct YYLTYPE *loc,
@@ -214,10 +222,13 @@ struct ast_class_data {
     VarType        *type;
     const Vector   *inheritance;
     const Vector   *stmts;
+    const Map      *symbols;
+    const Map      *fields;
 };
 struct ast_class_vtable {
     void (*free)    (const void*);
     void (*json)    (const void*, int, FILE*);
+    int  (*codegen) (const void*, FILE*);
     int  (*get_type)(const void*, const Map*, VarType**);
 };
 const ASTNode *new_ClassNode(struct YYLTYPE *loc,
@@ -236,6 +247,7 @@ struct ast_int_data {
 struct ast_int_vtable {
     void (*free)       (const void*);
     void (*json)       (const void*, int, FILE*);
+    int  (*codegen)    (const void*, FILE*);
     int  (*get_type)   (const void*, const Map*, VarType**);
     int  (*assign_type)(const void*, VarType*, const Map*);
 };
@@ -253,6 +265,7 @@ struct ast_double_data {
 struct ast_double_vtable {
     void (*free)       (const void*);
     void (*json)       (const void*, int, FILE*);
+    int  (*codegen)    (const void*, FILE*);
     int  (*get_type)   (const void*, const Map*, VarType**);
     int  (*assign_type)(const void*, VarType*, const Map*);
 };
@@ -270,6 +283,7 @@ struct ast_variable_data {
 struct ast_variable_vtable {
     void (*free)       (const void*);
     void (*json)       (const void*, int, FILE*);
+    int  (*codegen)    (const void*, FILE*);
     int  (*get_type)   (const void*, const Map*, VarType**);
     int  (*assign_type)(const void*, VarType*, const Map*);
     int  (*get_vars)   (const void*);
@@ -289,6 +303,7 @@ struct ast_typed_var_data {
 struct ast_typed_var_vtable {
     void (*free)       (const void*);
     void (*json)       (const void*, int, FILE*);
+    int  (*codegen)    (const void*, FILE*);
     int  (*get_type)   (const void*, const Map*, VarType**);
     int  (*assign_type)(const void*, VarType*, const Map*);
     int  (*get_vars)   (const void*);
