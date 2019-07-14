@@ -10,8 +10,12 @@ typedef struct codegen_state CodeGenState;
 
 struct codegen_state {
     const Map *declared_vars;
+    const Map *declared_func_sigs;
+    const Map *defined_funcs;
     int indent;
-    int locals_count;
+    size_t func_sig_count;
+    size_t func_count;
+    size_t local_count;
 };
 
 int CodeGen_Program   (const void *this, FILE *out);

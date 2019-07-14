@@ -120,8 +120,8 @@ int map_put(const Map *this,
     int h = hash(key, len);
     Entry **curr;
     for (curr = &data->entries[h % data->capacity];
-         *curr != NULL;
-         curr = &(*curr)->next) {
+        *curr != NULL;
+        curr = &(*curr)->next) {
         int cmp = keycmp(key, len, (*curr)->key, (*curr)->len);
         if (cmp == 0) {
             if (prev_ptr == NULL) {

@@ -12,6 +12,7 @@ static const Vector *assigned_vars; // Use this to store any variables that will
                                     // be assigned to an object with scope. They
                                     // will then be visible within that scope as
                                     // instances of itself.
+const Map *func_defs;
 
 static int funccmp(const FuncType *type1, const FuncType *type2);
 static int copy_FuncType(FuncType *type, FuncType **copy_ptr);
@@ -382,6 +383,7 @@ int TypeCheck_Program(const void *this) {
     ASTProgramData *data  = node->data;
     const Vector   *stmts = data->statements;
     state.type = NONE;
+    func_defs = new_Map(0, 0);
     int size = 0;
     ASTNode **stmt_arr = NULL;
     safe_method_call(stmts, array, &size, &stmt_arr);
@@ -721,6 +723,7 @@ int GetType_Variable(const void *this, const Map *symbols, VarType **type_ptr) {
     }
     if (symbols->contains(symbols, data->name, len)) {
         safe_method_call(symbols, get, data->name, len, type_ptr);
+        data->type = *type_ptr;
         return 0;
     } else {
         //TODO: Handle use before init error
@@ -744,10 +747,12 @@ int GetType_TypedVar(const void *this, const Map *symbols, VarType **type_ptr) {
         if (typecmp(*type_ptr, data->given_type)) {
             return 1;
         }
+        data->type = *type_ptr;
         return 0;
     } else {
-        safe_function_call(copy_VarType, data->given_type, type_ptr);
+        *type_ptr = data->given_type;
         safe_method_call(symbols, put, data->name, len, *type_ptr, NULL);
+        data->type = *type_ptr;
         return 0;
     }
 }
@@ -855,6 +860,12 @@ int GetType_Function(const void *this,
     if (err) return 1;
     state = prev_scope;
     *type_ptr = data->type;
+    safe_method_call(func_defs,
+                     put,
+                     &data->type,
+                     sizeof(data->type),
+                     this,
+                     NULL);
     return 0;
 }
 
@@ -913,7 +924,8 @@ int AssignType_Variable(const void *this, VarType *type, const Map *symbols) {
             return 1;
         }
     } else {
-        safe_function_call(copy_VarType, type, &put_type);
+        //safe_function_call(copy_VarType, type, &put_type);
+        put_type = type;
         safe_method_call(symbols, put, data->name, len, put_type, NULL);
     }
     data->type = put_type; // Store the inferred type for later
@@ -940,7 +952,8 @@ int AssignType_TypedVar(const void *this, VarType *type, const Map *symbols) {
     if (symbols->contains(symbols, data->name, len)) {
         safe_method_call(symbols, get, data->name, len, &put_type);
     } else {
-        safe_function_call(copy_VarType, type, &put_type);
+        //safe_function_call(copy_VarType, type, &put_type);
+        put_type = type;
         safe_method_call(symbols, put, data->name, len, put_type, NULL);
     }
     if (typecmp(type, put_type)) {

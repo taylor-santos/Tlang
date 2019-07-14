@@ -35,7 +35,7 @@ static void free_program(const void *this) {
     const ASTNode *node = this;
     ASTProgramData *data = node->data;
     data->statements->free(data->statements, free_ASTNode);
-    data->symbols->free(data->symbols, free_VarType);
+    data->symbols->free(data->symbols, NULL);
     free(data->loc);
     free(node->data);
     free(node->vtable);
