@@ -74,7 +74,7 @@ int main(int argc, char *argv[]) {
     if (out_filename != NULL) {
         output = fopen(out_filename, "w");
     } else {
-        output = stdout;
+        output = fopen("a.out.c", "w");
     }
     if (output == NULL) {
         asprintf(&err,
@@ -141,21 +141,6 @@ void print_usage(char *argv0) {
     for (i = 0; i < count; i++) {
         printf("  %s\n", options_help[i]);
     }
-}
-
-int asprintf(char **strp, const char *fmt, ...) {
-    va_list args;
-    int size;
-
-    va_start(args, fmt);
-    size = vsnprintf(NULL, 0, fmt, args);
-    va_end(args);
-    *strp = malloc(size);
-    if (*strp == NULL) {
-        return -1;
-    }
-    va_start(args, fmt);
-    return vsprintf(*strp, fmt, args);
 }
 
 void *malloc_check(size_t size) {

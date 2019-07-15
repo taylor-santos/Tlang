@@ -2,6 +2,7 @@
     #include <stdio.h>
     #include <stdlib.h>
     #include <string.h> // strdup()
+    #include <stdarg.h>
     #include "Tlang_parser.h"
     #include "Tlang_scanner.h"
     #include "safe.h"

@@ -1,6 +1,8 @@
 #ifndef SAFE_H
 #define SAFE_H
 
+#include <stdarg.h>
+
 #define UNUSED __attribute__ ((unused))
 #define RED     "\033[0;91m"
 #define WHITE   "\033[0m"
@@ -46,5 +48,15 @@
         } \
     } \
     void safe_vfprintf()
+
+int asprintf(char **strp, const char *fmt, ...);
+
+#define safe_asprintf(strp, fmt, ...) { \
+        if (asprintf(strp, fmt, __VA_ARGS__) < 0) { \
+            print_ICE("file printing failed"); \
+            exit(EXIT_FAILURE); \
+        } \
+    } \
+    void safe_asprintf()
 
 #endif//SAFE_H

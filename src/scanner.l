@@ -221,14 +221,17 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
     [/]{2}.*                // Ignore comments
     [\\][ \t]*[\n\r]+[ \t]* // Ignore escaped newlines
 
-    func    { push_token((Token){.type=T_FUNC}); }
-    return  { push_token((Token){.type=T_RETURN}); }
-    ref     { push_token((Token){.type=T_REF}); }
-    call    { push_token((Token){.type=T_CALL}); }
-    class   { push_token((Token){.type=T_CLASS}); }
-    ->      { push_token((Token){.type=T_ARROW}); }
-    [+\-*/] { push_token((Token){.type=T_IDENT,
-                                 .value.str_val=strdup(yytext)}); }
+    func     { push_token((Token){.type=T_FUNC}); }
+    return   { push_token((Token){.type=T_RETURN}); }
+    ref      { push_token((Token){.type=T_REF}); }
+    call     { push_token((Token){.type=T_CALL}); }
+    class    { push_token((Token){.type=T_CLASS}); }
+    int      { push_token((Token){.type=T_IDENT,
+                                  .value.str_val=strdup(yytext)}); }
+    double   { push_token((Token){.type=T_IDENT,
+                                  .value.str_val=strdup(yytext)}); }
+    ->       { push_token((Token){.type=T_ARROW}); }
+    [=:\(\)] { push_token((Token){.type=*yytext}); }
 
     [0-9]+ {
         push_token((Token){.type=T_INT,    .value.int_val=atoi(yytext)});
@@ -237,7 +240,9 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
         push_token((Token){.type=T_DOUBLE, .value.double_val=atof(yytext)});
     }
     [a-zA-Z_][a-zA-Z0-9_]* {
-        push_token((Token){.type=T_IDENT,  .value.str_val=strdup(yytext)});
+        char *val = NULL;
+        asprintf(&val, "var_%s", yytext);
+        push_token((Token){.type=T_IDENT,  .value.str_val=val});
     }
 
     "\n" {
@@ -250,9 +255,11 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
         }
     }
 
-    [ \t]+                  // Ignore non-leading whitespace
+    [ \t]+ // Ignore non-leading whitespace
     . {
-        push_token((Token){.type=*yytext});
+        char *val = NULL;
+        safe_asprintf(&val, "chr_0x%X", (int)*yytext);
+        push_token((Token){.type=T_IDENT, .value.str_val=val});
     }
 }
 

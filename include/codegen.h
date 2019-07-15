@@ -12,6 +12,7 @@ struct codegen_state {
     const Map *declared_vars;
     const Map *declared_func_sigs;
     const Map *defined_funcs;
+    const Map *function_IDs;
     int indent;
     size_t func_sig_count;
     size_t func_count;

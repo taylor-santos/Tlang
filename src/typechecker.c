@@ -32,7 +32,7 @@ int add_builtins(const Map *map) {
     if (map == NULL) {
         return 1;
     }
-    const char *binops[] = { "+", "-", "*", "/" };
+    const char *binops[] = { "chr_0x2B", "chr_0x2D", "chr_0x2A", "chr_0x2F" };
     size_t n = sizeof(binops) / sizeof(*binops);
     for (size_t i = 0; i < n; i++) {
         VarType *arg_type = NULL;
@@ -53,16 +53,34 @@ int add_builtins(const Map *map) {
             &func->extension);
         VarType *func_type = NULL;
         safe_function_call(new_VarType_from_FuncType, func, &func_type);
-        VarType *prev_type = NULL;
         safe_method_call(map,
                          put,
                          binops[i],
                          strlen(binops[i]),
                          func_type,
-                         &prev_type);
-        if (prev_type != NULL) {
-            free_VarType(prev_type);
-        }
+                         NULL);
+    }
+    const char *builtins[] = { "var_println" };
+    n = sizeof(builtins) / sizeof(*builtins);
+    for (size_t i = 0; i < n; i++) {
+        VarType *arg_type = NULL;
+        safe_function_call(new_VarType, "int", &arg_type);
+        NamedArg *arg = NULL;
+        safe_function_call(new_NamedArg, strdup("val"), arg_type, &arg);
+        const Vector *args = new_Vector(0);
+        safe_method_call(args, append, arg);
+        VarType *ret_type = NULL;
+        safe_function_call(new_NoneType, &ret_type);
+        FuncType *func = NULL;
+        safe_function_call(new_FuncType, args, ret_type, &func);
+        VarType *func_type = NULL;
+        safe_function_call(new_VarType_from_FuncType, func, &func_type);
+        safe_method_call(map,
+                         put,
+                         builtins[i],
+                         strlen(builtins[i]),
+                         func_type,
+                         NULL);
     }
     return 0;
 }
@@ -480,7 +498,8 @@ int parse_expression(const ASTNode **nodes,
                      int *index_ptr,
                      const Map *symbols,
                      VarType **type_ptr,
-                     int ret_first_type) {
+                     int ret_first_type,
+                     Expression **expr_ptr) {
     if (*index_ptr < 0 || size <= *index_ptr) {
         //TODO: Handle not enough arguments
         fprintf(stderr, "error: Not enough arguments\n");
@@ -493,10 +512,17 @@ int parse_expression(const ASTNode **nodes,
     if (vtable->get_type(nodes[*index_ptr], symbols, &type)) {
         return 1;
     }
+    *expr_ptr = malloc(sizeof(**expr_ptr));
+    if (*expr_ptr == NULL) {
+        print_ICE("malloc failed");
+        return 1;
+    }
+    (*expr_ptr)->node = nodes[*index_ptr];
     if (in_paren) {
         in_paren = prev_paren;
         (*index_ptr)++;
         *type_ptr = type;
+        (*expr_ptr)->type = EXPR_VALUE;
         return 0;
     }
     in_paren = prev_paren;
@@ -505,8 +531,11 @@ int parse_expression(const ASTNode **nodes,
     switch (type->type) {
         case BUILTIN:
             expr_type = type;
+            (*expr_ptr)->type = EXPR_VALUE;
             break;
-        case FUNCTION:;
+        case FUNCTION:
+            (*expr_ptr)->type = EXPR_FUNC;
+            (*expr_ptr)->args = new_Vector(0);
             if (type->function->extension != NULL) {
                 *type_ptr = type;
                 return 0;
@@ -518,18 +547,22 @@ int parse_expression(const ASTNode **nodes,
             if (in_ref == 0 && arg_count > 0) {
                 if (*index_ptr + arg_count > size) {
                     *type_ptr = type;
+                    (*expr_ptr)->type = EXPR_VALUE;
                     return 0;
                 }
                 for (int i = 0; i < arg_count; i++) {
                     VarType *arg_type = NULL;
+                    Expression *new_expr;
                     if (parse_expression(nodes,
                                          size,
                                          index_ptr,
                                          symbols,
                                          &arg_type,
-                                         1)) {
+                                         1,
+                                         &new_expr)) {
                         return 1;
                     }
+                    safe_method_call((*expr_ptr)->args, append, new_expr);
                     NamedArg *expected_arg = NULL;
                     safe_method_call(type->function->named_args,
                         get,
@@ -548,30 +581,35 @@ int parse_expression(const ASTNode **nodes,
             break;
         case NONE:
             expr_type = type;
+            (*expr_ptr)->type = EXPR_VALUE;
             break;
         case REFERENCE:;
             int prev_ref = in_ref;
             in_ref = 1;
+            free(*expr_ptr);
             if (parse_expression(nodes,
                                  size,
                                  index_ptr,
                                  symbols,
                                  &expr_type,
-                                 1)) {
+                                 1,
+                                 expr_ptr)) {
                 return 1;
             }
-
+            (*expr_ptr)->type = EXPR_VALUE;
             in_ref = prev_ref;
             break;
         case CALLER:
             prev_ref = in_ref;
             in_ref = 0;
+            free(*expr_ptr);
             if (parse_expression(nodes,
                                  size,
                                  index_ptr,
                                  symbols,
                                  &expr_type,
-                                 1)) {
+                                 1,
+                                 expr_ptr)) {
                 return 1;
             }
             in_ref = prev_ref;
@@ -593,12 +631,14 @@ int parse_expression(const ASTNode **nodes,
     }
     while (ret_first_type == 0 && *index_ptr < size) {
         VarType *new_type;
+        Expression *rhs_expr = NULL;
         if (parse_expression(nodes,
                              size,
                              index_ptr,
                              symbols,
                              &new_type,
-                             0)) {
+                             0,
+                             &rhs_expr)) {
             return 1;
         }
         if (new_type->type == FUNCTION &&
@@ -613,26 +653,31 @@ int parse_expression(const ASTNode **nodes,
                         new_type->function->named_args);
                 for (int i = 0; i < arg_count; i++) {
                     VarType *arg_type = NULL;
+                    Expression *arg_expr = NULL;
                     if (parse_expression(nodes,
-                        size,
-                        index_ptr,
-                        symbols,
-                        &arg_type,
-                        1)) {
-                        return 1;
+                                         size,
+                                         index_ptr,
+                                         symbols,
+                                         &arg_type,
+                                         1,
+                                         &arg_expr)) {
+                                         return 1;
                     }
                     NamedArg *expected_arg = NULL;
                     safe_method_call(new_type->function->named_args,
-                        get,
-                        i,
-                        &expected_arg);
+                                     get,
+                                     i,
+                                     &expected_arg);
                     if (typecmp(arg_type, expected_arg->type)) {
                         //TODO: Handle incompatible argument type
                         fprintf(stderr,
                             "error: incompatible argument type\n");
                         return 1;
                     }
+                    safe_method_call(rhs_expr->args, append, arg_expr);
                 }
+                rhs_expr->extension = *expr_ptr;
+                *expr_ptr = rhs_expr;
                 expr_type = new_type->function->ret_type;
                 if (expr_type->type == FUNCTION &&
                     expr_type->function->extension != NULL) {
@@ -662,12 +707,20 @@ int GetType_Expression(const void *this,
     int size = exprs->size(exprs);
     safe_method_call(exprs, array, &size, &nodes);
     int index = 0;
-    int result = parse_expression(nodes, size, &index, symbols, type_ptr, 0);
+    Expression *expr;
+    int result = parse_expression(nodes,
+                                  size,
+                                  &index,
+                                  symbols,
+                                  type_ptr,
+                                  0,
+                                  &expr);
     if (index < size) {
         //TODO: Handle dangling expression
         fprintf(stderr, "error: dangling expression\n");
         return 1;
     }
+    data->expr_node = expr;
     free(nodes);
     return result;
 }
@@ -695,9 +748,11 @@ int GetType_Paren(const void *this,
     ASTStatementVTable *vtable = data->val->vtable;
     int prev_ref = in_ref;
     in_ref = 0;
+    int prev_paren = in_paren;
     in_paren = 1;
     int result =  vtable->get_type(data->val, symbols, type_ptr);
     in_ref = prev_ref;
+    in_paren = prev_paren;
     return result;
 }
 

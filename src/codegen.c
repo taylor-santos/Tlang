@@ -19,6 +19,26 @@ static void fprintf_code(FILE *out, const char *fmt, ...) {
 
 static int print_signature(FILE *out, VarType *type, const char *name);
 
+static int print_function_args(FILE *out, VarType *func_type) {
+    safe_fprintf(out, "(void*");
+    if (func_type->function->extension != NULL) {
+        safe_fprintf(out, ", ");
+        safe_function_call(print_signature,
+                           out,
+                           func_type->function->extension->type,
+                           NULL);
+    }
+    int count;
+    const NamedArg **args = NULL;
+    safe_method_call(func_type->function->named_args, array, &count, &args);
+    for (int i = 0; i < count; i++) {
+        safe_fprintf(out, ", ");
+        safe_function_call(print_signature, out, args[i]->type, NULL);
+    }
+    safe_fprintf(out, ")");
+    return 0;
+}
+
 static int print_function_signature(FILE *out,
                                     VarType *type,
                                     const char *name,
@@ -43,14 +63,13 @@ static int print_function_signature(FILE *out,
         while (func_queue->size(func_queue) > 0){
             VarType *curr_type = NULL;
             safe_method_call(func_queue, pop, &curr_type);
-            safe_fprintf(out, "(");
-            char *sep = "";
+            safe_fprintf(out, "(void*");
             if (curr_type->function->extension != NULL) {
+                safe_fprintf(out, ", ");
                 safe_function_call(print_signature,
-                    out,
-                    curr_type->function->extension->type,
-                    NULL);
-                sep = ", ";
+                                   out,
+                                   curr_type->function->extension->type,
+                                   NULL);
             }
             int count;
             const NamedArg **args = NULL;
@@ -59,10 +78,9 @@ static int print_function_signature(FILE *out,
                 &count,
                 &args);
             for (int i = 0; i < count; i++) {
-                safe_fprintf(out, "%s", sep);
+                safe_fprintf(out, ", ");
                 safe_function_call(print_signature, out, args[i]->type,
                     NULL);
-                sep = ", ";
             }
             free(args);
             safe_fprintf(out, ")");
@@ -117,32 +135,84 @@ static void declare_type(FILE *out, VarType *type, const char *name) {
 static int declare_functions(FILE *out, const Map *locals) {
     int size = 0;
     size_t *lengths = NULL;
-    const char **keys = NULL;
-    safe_method_call(locals, keys, &size, &lengths, &keys);
+    VarType ***keys = NULL;
+    safe_method_call(func_defs, keys, &size, &lengths, &keys);
+    for (int i = 0; i < size; i++) {
+        VarType *func_type = *keys[i];
+        size_t ID =
+        safe_method_call(state.function_IDs,
+            put,
+            &func_type,
+            sizeof(func_type),
+            (size_t)i,
+            NULL);
+        VarType *ret_type = func_type->function->ret_type;
+        fprintf_code(out, "typedef ");
+        if (ret_type->type == FUNCTION) {
+            safe_fprintf(out, "struct {\n");
+            state.indent++;
+            fprintf_code(out, "");
+            print_signature(out, ret_type, "func");
+            safe_fprintf(out, ";\n");
+            fprintf_code(out, "void *env;\n", i);
+            state.indent--;
+            fprintf_code(out, "} *");
+        } else {
+            print_signature(out, ret_type, NULL);
+            safe_fprintf(out, " ");
+        }
+        safe_fprintf(out, "func%d_ret;\n", i);
+        fprintf_code(out, "typedef struct {\n");
+        state.indent++;
+        fprintf_code(out, "func%d_ret (*func)", i);
+        safe_function_call(print_function_args, out, func_type);
+        safe_fprintf(out, ";\n");
+        fprintf_code(out, "void *env;\n");
+        state.indent--;
+        fprintf_code(out, "} closure%d;\n", i);
+        fprintf_code(out, "func%d_ret func%d", i, i);
+        safe_function_call(print_function_args, out, func_type);
+        safe_fprintf(out, ";\n\n");
+    }
+    return 0;
+}
+
+static int print_env(FILE *out, const Map *symbols) {
+    int size = 0;
+    size_t *lengths = NULL;
+    char **keys = NULL;
+    safe_method_call(symbols, keys, &size, &lengths, &keys);
     for (int i = 0; i < size; i++) {
         VarType *type = NULL;
-        safe_method_call(locals, get, keys[i], lengths[i], &type);
+        safe_method_call(symbols, get, keys[i], lengths[i], &type);
         if (type->type == FUNCTION) {
-            if (!state.declared_func_sigs->contains(state.declared_func_sigs,
-                                                &type,
-                                                sizeof(type))) {
-                fprintf_code(out, "typedef ");
-                char name[64];
-                sprintf(name, "func%d_sig", (int)state.func_sig_count);
-                declare_type(out, type, name);
-                safe_method_call(state.declared_func_sigs,
-                                 put,
-                                 &type,
-                                 sizeof(type),
-                                 (void*)state.func_sig_count,
-                                 NULL);
-                state.func_sig_count++;
-            }
+            int funcID
         }
-        free((void*)keys[i]);
+        fprintf_code(out, "%*s\n", lengths[i], keys[i]);
     }
-    free(lengths);
-    free(keys);
+    return 0;
+}
+
+static int define_envs(FILE *out, const Map *globals) {
+    int size = 0;
+    size_t *lengths = NULL;
+    VarType ***keys = NULL;
+    safe_method_call(func_defs, keys, &size, &lengths, &keys);
+    for (int i = 0; i < size; i++) {
+        ASTNode *node = NULL;
+        safe_method_call(func_defs, get, keys[i], lengths[i], &node);
+        fprintf_code(out, "typedef struct {\n");
+        state.indent++;
+        ASTFunctionData *data = node->data;
+        safe_function_call(print_env, out, data->symbols);
+        state.indent--;
+        fprintf_code(out, "} func%d_locals;\n\n", i);
+    }
+    fprintf_code(out, "struct globals {\n");
+    state.indent++;
+    safe_function_call(print_env, out, globals);
+    state.indent--;
+    fprintf_code(out, "} globals;\n\n");
     return 0;
 }
 
@@ -156,40 +226,146 @@ static int define_functions(FILE *out, const Map *locals) {
         safe_method_call(func_defs, get, sigs[i], lengths[i], &node);
         ASTFunctionData *data = node->data;
         FuncType *signature = data->type->function;
-        print_signature(out, signature->ret_type, NULL);
+        char *name;
+        safe_asprintf(&name, "func%d_ret", (int)state.func_count);
+        fprintf_code(out, "typedef ");
+        print_signature(out, signature->ret_type, name);
+        safe_fprintf(out, ";\n");
+        fprintf_code(out, "%s ", name);
+        free(name);
         safe_method_call(state.defined_funcs,
                          put,
                          sigs[i],
                          lengths[i],
                          (void*)state.func_count,
                          NULL);
-        safe_fprintf(out, " func%d(", (int)state.func_count);
+        safe_fprintf(out, "func%d(", (int)state.func_count);
+
         int arg_count = 0;
         NamedArg **args = NULL;
         safe_method_call(signature->named_args, array, &arg_count, &args);
-        char *sep = "";
+        const Map *vars_copy = NULL;
+        safe_method_call(state.declared_vars, copy, &vars_copy, NULL);
+        const Map *prev_vars = state.declared_vars;
+        state.declared_vars = vars_copy;
+        char *sep = ", ";
+        if (signature->extension != NULL) {
+            NamedArg *arg = signature->extension;
+            print_signature(out, arg->type, arg->name);
+            sep = ", ";
+            VarType *prev_type = NULL;
+            safe_method_call(state.declared_vars,
+                             put,
+                             arg->name,
+                             strlen(arg->name),
+                             (void*)state.local_count,
+                             &prev_type);
+        }
         for (int j = 0; j < arg_count; j++) {
             NamedArg *arg = args[j];
             safe_fprintf(out, "%s", sep);
             print_signature(out, arg->type, arg->name);
             sep = ", ";
+            VarType *prev_type = NULL;
+            safe_method_call(state.declared_vars,
+                             put,
+                             args[j]->name,
+                             strlen(args[j]->name),
+                             (void*)state.local_count,
+                             &prev_type);
         }
         safe_fprintf(out, ") {\n");
         state.indent++;
+        fprintf_code(out, "struct locals%d {\n", state.local_count);
+        state.indent++;
+        if (signature->extension != NULL) {
+            NamedArg *arg = signature->extension;
+            fprintf_code(out, "");
+            print_signature(out, arg->type, arg->name);
+            safe_fprintf(out, ";\n");
+        }
+        for (int j = 0; j < arg_count; j++) {
+            NamedArg *arg = args[j];
+            fprintf_code(out, "");
+            print_signature(out, arg->type, arg->name);
+            safe_fprintf(out, ";\n");
+        }
+        state.indent--;
+        fprintf_code(out, "} locals%d;\n", state.local_count);
+        if (signature->extension != NULL) {
+            fprintf_code(out,
+                         "locals%d.%s = %s;\n",
+                         state.local_count,
+                         signature->extension->name,
+                         signature->extension->name);
+        }
+        for (int j = 0; j < arg_count; j++) {
+            NamedArg *arg = args[j];
+            fprintf_code(out,
+                         "locals%d.%s = %s;\n",
+                         state.local_count,
+                         arg->name,
+                         arg->name);
+        }
+        state.local_count++;
         int stmt_count = 0;
         ASTNode **stmts = NULL;
         safe_method_call(data->stmts, array, &stmt_count, &stmts);
-        for (int j = 0; j < arg_count; j++) {
+        for (int j = 0; j < stmt_count; j++) {
             ASTStatementVTable *vtable = stmts[j]->vtable;
+            fprintf_code(out, "");
             vtable->codegen(stmts[j], out);
+            safe_fprintf(out, ";\n");
         }
+        state.declared_vars = prev_vars;
         state.indent--;
-        fprintf_code(out, "}\n");
+        fprintf_code(out, "}\n\n");
         free(sigs[i]);
         state.func_count++;
     }
     free(sigs);
     free(lengths);
+    return 0;
+}
+
+static int define_builtin_funcs(FILE *out) {
+    char binops[] = { '+', '-', '*', '/' };
+    int num = sizeof(binops) / sizeof(*binops);
+    for (int i = 0; i < num; i++) {
+        char *func_name = NULL;
+        safe_asprintf(&func_name, "chr_0x%X", binops[i]);
+        fprintf_code(out, "int %s(int x, int y) {\n", func_name);
+        state.indent++;
+        fprintf_code(out, "return x %c y;\n", binops[i]);
+        state.indent--;
+        fprintf_code(out, "}\n");
+    }
+    char *builtins[] = { "var_println" };
+    num = sizeof(builtins) / sizeof(*builtins);
+    for (int i = 0; i < num; i++) {
+        fprintf_code(out, "void %s(int val) {\n", builtins[i]);
+        state.indent++;
+        fprintf_code(out, "printf(\"%%d\\n\", val);\n");
+        state.indent--;
+        fprintf_code(out, "}\n");
+    }
+
+    return 0;
+}
+
+static int assign_builtin_funcs(FILE *out) {
+    char binops[] = { '+', '-', '*', '/' };
+    int num = sizeof(binops) / sizeof(*binops);
+    for (int i = 0; i < num; i++) {
+        char *func_name = NULL;
+        safe_asprintf(&func_name, "chr_0x%X", binops[i]);
+        fprintf_code(out, "locals0.%s = %s;\n", func_name, func_name);
+    }
+    char *builtins[] = { "var_println" };
+    num = sizeof(builtins) / sizeof(*builtins);
+    for (int i = 0; i < num; i++) {
+        fprintf_code(out, "locals0.%s = %s;\n", builtins[i], builtins[i]);
+    }
     return 0;
 }
 
@@ -247,24 +423,33 @@ static int declare_locals(FILE *out, const Map *locals) {
 
 
 int CodeGen_Program(const void *this, FILE *out) {
-    state.declared_vars = new_Map(0, 0);
+    state.declared_vars      = new_Map(0, 0);
     state.declared_func_sigs = new_Map(0, 0);
-    state.defined_funcs = new_Map(0, 0);
+    state.defined_funcs      = new_Map(0, 0);
+    state.function_IDs       = new_Map(0, 0);
     state.indent = 0;
     state.local_count = 0;
     fprintf_code(out, "#include <stdlib.h>\n");
     fprintf_code(out, "#include <stdio.h>\n");
     fprintf_code(out, "\n");
+    fprintf_code(out,
+        "#define call(closure, args...) closure->func(closure->env, ##args)\n");
+    safe_fprintf(out, "\n");
     const ASTNode  *node = this;
     ASTProgramData *data = node->data;
     safe_function_call(declare_functions, out, data->symbols);
-    safe_fprintf(out, "\n");
+    safe_function_call(define_envs, out, data->symbols);
+
+    /*
     safe_function_call(declare_locals, out, data->symbols);
     safe_fprintf(out, "\n");
     safe_function_call(define_functions, out, data->symbols);
     safe_fprintf(out, "\n");
+    safe_function_call(define_builtin_funcs, out);
+    safe_fprintf(out, "\n");
     fprintf_code(out, "int main() {\n");
     state.indent++;
+    assign_builtin_funcs(out);
     int size = 0;
     ASTNode **stmt_arr = NULL;
     safe_method_call(data->statements, array, &size, &stmt_arr);
@@ -278,6 +463,7 @@ int CodeGen_Program(const void *this, FILE *out) {
     free(stmt_arr);
     state.indent--;
     fprintf_code(out, "}\n");
+     */
     return 0;
 }
 
@@ -286,7 +472,6 @@ int CodeGen_Assignment(const void *this, FILE *out) {
     ASTAssignmentData *data = node->data;
     const ASTNode     *lhs_node = data->lhs;
     ASTLExprVTable    *lhs_vtable = lhs_node->vtable;
-    safe_fprintf(out, "");
     if (lhs_vtable->codegen(lhs_node, out)) {
         return 1;
     }
@@ -303,52 +488,53 @@ int CodeGen_Return(const void *this, FILE *out) {
     const ASTNode *node = this;
     ASTReturnData *data = node->data;
     if (data->returns == NULL) {
-        fprintf_code(out, "return;\n");
+        safe_fprintf(out, "return");
     } else {
-        fprintf_code(out, "return ");
+        safe_fprintf(out, "return ");
         const ASTNode *return_node = data->returns;
         ASTStatementVTable *vtable = return_node->vtable;
         safe_function_call(vtable->codegen, return_node, out);
-        safe_fprintf(out, ";\n");
     }
     return 0;
 }
 
-int gen_expression(FILE *out,
-                   const ASTNode **nodes,
-                   int size,
-                   int *index_ptr) {
-    if (*index_ptr < 0 || size <= *index_ptr) {
-        //TODO: Handle not enough arguments
-        fprintf(stderr, "error: Not enough arguments\n");
-        return 1;
+int gen_expression(FILE *out, Expression *expr) {
+    if (expr->type == EXPR_VALUE) {
+        const ASTNode      *node = expr->node;
+        ASTStatementVTable *vtable = node->vtable;
+        safe_function_call(vtable->codegen, node, out);
+        return 0;
+    } else {
+        const ASTNode      *node = expr->node;
+        ASTStatementVTable *vtable = node->vtable;
+        safe_function_call(vtable->codegen, node, out);
+        safe_fprintf(out, "(");
+        char *sep = "";
+        if (expr->extension != NULL) {
+            safe_function_call(
+                gen_expression,
+                out,
+                (Expression*)expr->extension);
+            sep = ", ";
+        }
+        int count = 0;
+        Expression **args = NULL;
+        safe_method_call(expr->args, array, &count, &args);
+        for (int i = 0; i < count; i++) {
+            safe_fprintf(out, "%s", sep);
+            safe_function_call(gen_expression, out, args[i]);
+            sep = ", ";
+        }
+        safe_fprintf(out, ")");
+        return 0;
     }
-    const ASTNode *node = nodes[*index_ptr];
-    ASTStatementData *data = node->data;
-    if (data->type == NULL) {
-        //TODO: Handle incomplete type check
-        print_ICE(
-            "type checker failed to infer type of statement before code gen");
-        return 1;
-    }
-    ASTStatementVTable *vtable =node->vtable;
-    if (vtable->codegen(node, out)) {
-        return 1;
-    }
-    return 0;
 }
 
 int CodeGen_Expression(UNUSED const void *this, UNUSED FILE *out) {
     const ASTNode     *node  = this;
     ASTExpressionData *data  = node->data;
-    const Vector      *exprs = data->exprs;
-    const ASTNode **nodes = NULL;
-    int size = exprs->size(exprs);
-    safe_method_call(exprs, array, &size, &nodes);
-    int index = 0;
-    int result = gen_expression(out, nodes, size, &index);
-    free(nodes);
-    return result;
+    Expression *expr = data->expr_node;
+    return gen_expression(out, expr);
 }
 
 int CodeGen_Ref(UNUSED const void *this, UNUSED FILE *out) {
@@ -357,7 +543,12 @@ int CodeGen_Ref(UNUSED const void *this, UNUSED FILE *out) {
 }
 
 int CodeGen_Paren(UNUSED const void *this, UNUSED FILE *out) {
-    fprintf(stderr, "Paren code gen under construction\n");
+    safe_fprintf(out, "(");
+    const ASTNode *node = this;
+    ASTParenData  *data = node->data;
+    ASTStatementVTable *vtable = data->val->vtable;
+    safe_function_call(vtable->codegen, data->val, out);
+    safe_fprintf(out, ")");
     return 0;
 }
 
@@ -404,7 +595,7 @@ int CodeGen_Variable(const void *this, FILE *out) {
     if (!state.declared_vars->contains(state.declared_vars, data->name, len)) {
         //TODO: handle variable used without being in symbol table (ICE?)
         print_ICE(
-            "type checker failed to infer type of variable before code gen");
+            "variable not found in code gen's declared variable list");
         return 1;
     }
     if (data->type == NULL) {

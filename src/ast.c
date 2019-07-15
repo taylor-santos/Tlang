@@ -310,6 +310,7 @@ const ASTNode *new_ExpressionNode(struct YYLTYPE *loc, const Vector *exprs) {
     memcpy(data->loc, loc, sizeof(*loc));
     data->exprs = exprs;
     data->type = NULL;
+    data->expr_node  = NULL;
     vtable->free     = free_expression;
     vtable->json     = json_expression;
     vtable->get_type = GetType_Expression;

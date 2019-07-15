@@ -7,6 +7,14 @@
 
 #define JSON_TAB_WIDTH 2
 
+typedef struct expr_node Expression;
+struct expr_node {
+    enum { EXPR_FUNC, EXPR_VALUE } type;
+    const void   *node;
+    const Vector *args;
+    const void   *extension;
+};
+
 /* AST Node */
 typedef struct ast_node        ASTNode;
 typedef struct ast_node_data   ASTNodeData;
@@ -117,6 +125,7 @@ struct ast_expression_data {
     struct YYLTYPE *loc;
     VarType        *type;
     const Vector   *exprs;
+    Expression     *expr_node;
 };
 struct ast_expression_vtable {
     void (*free)    (const void*);
