@@ -26,7 +26,7 @@ typedef struct token {
         if (yytext[i] == '\n') { \
             yylloc->last_line++; \
             yylloc->last_column = 1; \
-        } else { \
+        } else if (yytext[i] != '\r') { \
             yylloc->last_column++; \
         } \
     } \
@@ -111,9 +111,6 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
                 return 1;
             case T_ARROW:
                 printf("ARROW\n");
-                return 1;
-            case T_CALL:
-                printf("CALL\n");
                 return 1;
             case T_CLASS:
                 printf("CLASS\n");
@@ -223,15 +220,14 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
 
     func     { push_token((Token){.type=T_FUNC}); }
     return   { push_token((Token){.type=T_RETURN}); }
-    ref      { push_token((Token){.type=T_REF}); }
-    call     { push_token((Token){.type=T_CALL}); }
+    &        { push_token((Token){.type=T_REF}); }
     class    { push_token((Token){.type=T_CLASS}); }
     int      { push_token((Token){.type=T_IDENT,
                                   .value.str_val=strdup(yytext)}); }
     double   { push_token((Token){.type=T_IDENT,
                                   .value.str_val=strdup(yytext)}); }
     ->       { push_token((Token){.type=T_ARROW}); }
-    [=:\(\)] { push_token((Token){.type=*yytext}); }
+    [=:\(\),] { push_token((Token){.type=*yytext}); }
 
     [0-9]+ {
         push_token((Token){.type=T_INT,    .value.int_val=atoi(yytext)});
@@ -245,7 +241,7 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
         push_token((Token){.type=T_IDENT,  .value.str_val=val});
     }
 
-    "\n" {
+    [\n\r]* {
         BEGIN(INITIAL);
         push_token((Token){.type=T_NEWLINE});
         indent = 0;

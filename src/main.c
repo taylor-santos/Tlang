@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <getopt.h> // getopt()
-#include <stdarg.h> // va_list, va_start(), va_end()
 #include "Tlang_parser.h"
 #include "Tlang_scanner.h"
 #include "ast.h"
@@ -37,7 +36,8 @@ int main(int argc, char *argv[]) {
     YY_BUFFER_STATE state;
 
     opterr = 0;
-    while ((opt = getopt_long(argc, argv, "o:h", options, &opt_index)) != -1) {
+    while ((opt =
+        getopt_long(argc, argv, "o:h", options, &opt_index)) != -1) {
         switch (opt) {
             case 'o':
                 out_filename = strdup_check(optarg);
@@ -72,9 +72,9 @@ int main(int argc, char *argv[]) {
         }
     }
     if (out_filename != NULL) {
-        output = fopen(out_filename, "w");
+        output = fopen(out_filename, "w+");
     } else {
-        output = fopen("a.out.c", "w");
+        output = fopen("a.out.c", "w+");
     }
     if (output == NULL) {
         asprintf(&err,
@@ -101,12 +101,11 @@ int main(int argc, char *argv[]) {
         if (yyparse(&AST, argv[optind + i], scanner)) {
             status = 1;
         } else {
-
             ASTProgramVTable *vtable = AST->vtable;
             if (!vtable->type_check(AST)) {
                 //vtable->json(AST, 0, stdout);
                 //fprintf(stdout, "\n");
-                if (!vtable->codegen(AST, output)) {
+                if (!vtable->codegen(AST, NULL, output)) {
                 } else {
                     printf("Code generation failed!\n");
                 }
@@ -122,12 +121,6 @@ int main(int argc, char *argv[]) {
     }
     free(inputs);
     if (status) {
-        exit(EXIT_FAILURE);
-    }
-    if (output == NULL) {
-        asprintf(&err, ERROR "unable to open file '%s'", out_filename);
-        perror(err);
-        free(err);
         exit(EXIT_FAILURE);
     }
     fclose(output);

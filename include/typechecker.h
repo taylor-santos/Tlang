@@ -11,10 +11,11 @@ typedef struct func_type     FuncType;
 typedef struct gettype_state GetTypeState;
 
 struct var_type {
-    enum { BUILTIN, FUNCTION, NONE, REFERENCE, CALLER, CLASS } type;
+    enum { BUILTIN, FUNCTION, NONE, REFERENCE, CLASS, RETURN } type;
     union {
         enum { INT, DOUBLE } builtin;
         FuncType *function;
+        VarType *ret_type;
     };
 };
 
@@ -36,9 +37,9 @@ void free_FuncType(void*);
 void free_NamedArg(void*);
 
 int new_VarType(const char *type, VarType **vartype_ptr);
+int new_ReturnType(VarType *ret_type, VarType **vartype_ptr);
 int new_NoneType (VarType **vartype_ptr);
 int new_RefType  (VarType **vartype_ptr);
-int new_CallType (VarType **vartype_ptr);
 int new_ClassType(VarType **vartype_ptr);
 int new_VarType_from_FuncType(FuncType *type, VarType **vartype_ptr);
 int new_NamedArg(char *name, VarType *type, NamedArg **namedarg_ptr);
@@ -50,18 +51,17 @@ void print_VarType(const void*);
 
 int TypeCheck_Program(const void*);
 
-int GetType_Assignment(const void*, const Map*, VarType**);
-int GetType_Return    (const void*, const Map*, VarType**);
-int GetType_Expression(const void*, const Map*, VarType**);
-int GetType_Ref       (const void*, const Map*, VarType**);
-int GetType_Paren     (const void*, const Map*, VarType**);
-int GetType_Call      (const void*, const Map*, VarType**);
-int GetType_Variable  (const void*, const Map*, VarType**);
-int GetType_TypedVar  (const void*, const Map*, VarType**);
-int GetType_Int       (const void*, const Map*, VarType**);
-int GetType_Double    (const void*, const Map*, VarType**);
-int GetType_Function  (const void*, const Map*, VarType**);
-int GetType_Class     (const void*, const Map*, VarType**);
+int GetType_Assignment(const void*, const Map*, const void*, VarType**);
+int GetType_Return    (const void*, const Map*, const void*, VarType**);
+int GetType_Expression(const void*, const Map*, const void*, VarType**);
+int GetType_Ref       (const void*, const Map*, const void*, VarType**);
+int GetType_Paren     (const void*, const Map*, const void*, VarType**);
+int GetType_Variable  (const void*, const Map*, const void*, VarType**);
+int GetType_TypedVar  (const void*, const Map*, const void*, VarType**);
+int GetType_Int       (const void*, const Map*, const void*, VarType**);
+int GetType_Double    (const void*, const Map*, const void*, VarType**);
+int GetType_Function  (const void*, const Map*, const void*, VarType**);
+int GetType_Class     (const void*, const Map*, const void*, VarType**);
 
 int AssignType_Variable(const void*, VarType*, const Map*);
 int AssignType_TypedVar(const void*, VarType*, const Map*);

@@ -31,7 +31,7 @@ void print_Map(const Map *this, void (*printer)(const void*)) {
         for (Entry *curr = data->entries[i]; curr != NULL; curr = curr->next) {
             const void *val = curr->value;
             printf("%s", sep);
-            printf("\"%.*s\": \"", (int)curr->len, (char*)curr->key);
+            printf("\"0x%.*x\": \"", (int)curr->len, (char*)curr->key);
             printer(val);
             printf("\"");
             sep = ",\n  ";
@@ -117,7 +117,7 @@ int map_put(const Map *this,
             const void *value,
             const void *prev_ptr) {
     Data *data = this->data;
-    int h = hash(key, len);
+    unsigned long h = hash(key, len);
     Entry **curr;
     for (curr = &data->entries[h % data->capacity];
         *curr != NULL;
@@ -165,7 +165,7 @@ int map_get(const Map *this,
             size_t len,
             const void *value_ptr) {
     Data *data = this->data;
-    int h = hash(key, len);
+    unsigned long h = hash(key, len);
     Entry *curr;
     for (curr = data->entries[h % data->capacity];
          curr != NULL;
@@ -186,7 +186,7 @@ int map_get(const Map *this,
 
 int map_contains(const Map *this, const void *key, size_t len) {
     Data *data = this->data;
-    int h = hash(key, len);
+    unsigned long h = hash(key, len);
     Entry *curr;
     for (curr = data->entries[h % data->capacity];
          curr != NULL;
@@ -262,6 +262,11 @@ int map_keys(const Map *this,
     return 0;
 }
 
+size_t map_size(const Map *this) {
+    Data *data = this->data;
+    return data->size;
+}
+
 void map_free(const Map *this, void (*val_free)(void*)) {
     Data *data = this->data;
     for (size_t i = 0; i < data->capacity; i++) {
@@ -307,6 +312,7 @@ const Map *new_Map(size_t capacity, double load_factor) {
     m->contains = map_contains;
     m->copy     = map_copy;
     m->keys     = map_keys;
+    m->size     = map_size;
     m->free     = map_free;
     return m;
 

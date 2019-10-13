@@ -5,8 +5,6 @@
 #include "safe.h"
 #include "codegen.h"
 
-VarType *global_type;
-
 static void json_vector(const Vector *vec,
                         int indent,
                         FILE *out,
@@ -15,6 +13,15 @@ static void json_VarType (const void *this, int indent, FILE *out);
 static void json_NamedArg(const void *this, int indent, FILE *out);
 static void json_FuncType(const void *this, int indent, FILE *out);
 static void json_string  (const void *this, int indent, FILE *out);
+
+void free_Expression(void *this) {
+    if (this == NULL) return;
+    Expression *expr = this;
+    if (expr->type == EXPR_FUNC) {
+        expr->args->free(expr->args, NULL);
+    }
+    free(this);
+}
 
 void free_ASTNode(void *this) {
     if (this == NULL) return;
@@ -36,6 +43,7 @@ static void free_program(const void *this) {
     ASTProgramData *data = node->data;
     data->statements->free(data->statements, free_ASTNode);
     data->symbols->free(data->symbols, NULL);
+    data->func_defs->free(data->func_defs, free);
     free(data->loc);
     free(node->data);
     free(node->vtable);
@@ -92,7 +100,8 @@ const ASTNode *new_ProgramNode(struct YYLTYPE *loc, const Vector *statements) {
     else
         data->statements = new_Vector(0);
     data->symbols      = new_Map(0, 0);
-    // safe_function_call(add_builtins, data->symbols);
+    safe_function_call(add_builtins, data->symbols);
+    data->func_defs    = new_Map(0, 0);
     vtable->free       = free_program;
     vtable->json       = json_program;
     vtable->type_check = TypeCheck_Program;
@@ -242,9 +251,6 @@ const ASTNode *new_ReturnNode(struct YYLTYPE *loc, const void *value) {
     memcpy(data->loc, loc, sizeof(*loc));
     data->returns = value;
     data->type = NULL;
-    if (data->returns == NULL) {
-        safe_function_call(new_NoneType, &data->type);
-    }
     vtable->free     = free_return;
     vtable->json     = json_return;
     vtable->get_type = GetType_Return;
@@ -257,6 +263,7 @@ static void free_expression(const void *this) {
     const ASTNode *node = this;
     ASTExpressionData *data = node->data;
     data->exprs->free(data->exprs, free_ASTNode);
+    free_Expression(data->expr_node);
     free(data->loc);
     free(node->data);
     free(node->vtable);
@@ -444,66 +451,6 @@ const ASTNode *new_ParenNode(struct YYLTYPE *loc, const ASTNode *val) {
     return node;
 }
 
-static void free_call(const void *this) {
-    if (this == NULL) return;
-    const ASTNode *node = this;
-    ASTCallData *data = node->data;
-    free(data->loc);
-    free(node->data);
-    free(node->vtable);
-    free((void*)node);
-}
-
-static void json_call(const void *this, int indent, FILE *out) {
-    fprintf(out, "{\n");
-    indent++;
-    fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
-    fprintf(out, "\"type\": \"Call\",\n");
-    fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
-    const ASTNode *node = this;
-    ASTCallData *data = node->data;
-    fprintf(out, "\"loc\": \"%d:%d-%d:%d\"", data->loc->first_line,
-        data->loc->first_column, data->loc->last_line,
-        data->loc->last_column);
-    fprintf(out, "\n");
-    indent--;
-    fprintf(out, "%*s}", indent * JSON_TAB_WIDTH, "");
-}
-
-const ASTNode *new_CallNode(struct YYLTYPE *loc) {
-    ASTNode *node = malloc(sizeof(*node));
-    if (node == NULL) {
-        return NULL;
-    }
-    struct ast_call_data *data = malloc(sizeof(*data));
-    if (data == NULL) {
-        free(node);
-        return NULL;
-    }
-    node->data = data;
-    struct ast_call_vtable *vtable = malloc(sizeof(*vtable));
-    if (vtable == NULL) {
-        free(data);
-        free(node);
-        return NULL;
-    }
-    node->vtable = vtable;
-    data->loc = malloc(sizeof(*loc));
-    if (data->loc == NULL) {
-        free(vtable);
-        free(data);
-        free(node);
-        return NULL;
-    }
-    memcpy(data->loc, loc, sizeof(*loc));
-    safe_function_call(new_CallType, &data->type);
-    vtable->free     = free_call;
-    vtable->json     = json_call;
-    vtable->get_type = GetType_Call;
-    vtable->codegen  = CodeGen_Call;
-    return node;
-}
-
 static void free_function(const void *this) {
     if (this == NULL) return;
     const ASTNode *node = this;
@@ -513,6 +460,7 @@ static void free_function(const void *this) {
     free_VarType(data->type);
     data->stmts->free(data->stmts, free_ASTNode);
     data->symbols->free(data->symbols, free_VarType);
+    data->env->free(data->env, free);
     free(data->loc);
     free(node->data);
     free(node->vtable);
@@ -574,8 +522,8 @@ const ASTNode *new_FunctionNode(struct YYLTYPE *loc,
     data->signature = signature;
     data->stmts = stmts;
     data->symbols = new_Map(0, 0);
+    data->env = new_Map(0, 0);
     safe_function_call(new_VarType_from_FuncType, signature, &data->type);
-    global_type = data->type;
     vtable->free =     free_function;
     vtable->json =     json_function;
     vtable->get_type = GetType_Function;
@@ -981,9 +929,6 @@ static void json_VarType(const void *this, int indent, FILE *out) {
             break;
         case REFERENCE:
             fprintf(out, "\"ref\"\n");
-            break;
-        case CALLER:
-            fprintf(out, "\"call\"\n");
             break;
         case CLASS:
             fprintf(out, "\"class\"\n");

@@ -2,6 +2,7 @@
 #define SAFE_H
 
 #include <stdarg.h>
+#include <stdlib.h>
 
 #define UNUSED __attribute__ ((unused))
 #define RED     "\033[0;91m"

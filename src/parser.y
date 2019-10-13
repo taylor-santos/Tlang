@@ -56,7 +56,7 @@
 }
 
 %token             T_INDENT T_OUTDENT T_ERROR T_NEWLINE T_FUNC T_RETURN T_REF
-                   T_ARROW T_CALL T_CLASS
+                   T_ARROW T_CLASS
 %token<int_val>    T_INT
 %token<double_val> T_DOUBLE
 %token<str_val>    T_IDENT
@@ -162,10 +162,6 @@ sub_expr:
         {
             $$ = new_ParenNode(&@$, new_ExpressionNode(&@$, $2));
         }
-  | T_CALL
-        {
-            $$ = new_CallNode(&@$);
-        }
   | T_REF
         {
             $$ = new_RefNode(&@$);
@@ -217,6 +213,10 @@ opt_extension:
 
 opt_args:
     %empty
+        {
+            $$ = new_Vector(0);
+        }
+  | '(' ')'
         {
             $$ = new_Vector(0);
         }
@@ -287,6 +287,10 @@ opt_named_extension:
 
 opt_named_args:
     %empty
+        {
+            $$ = new_Vector(0);
+        }
+  | '(' ')'
         {
             $$ = new_Vector(0);
         }
