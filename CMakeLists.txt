@@ -28,4 +28,5 @@ add_executable(tcc
         src/ast.c
         src/typechecker.c
         src/codegen.c
+        src/safe.c
 )

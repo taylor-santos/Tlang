@@ -14,17 +14,6 @@ static int funccmp(const FuncType *type1, const FuncType *type2);
 static int copy_FuncType(FuncType *type, FuncType **copy_ptr);
 static int copy_VarType(const void *type, const void *copy_ptr);
 
-static int strdup_safe(const char *str, char **dup_ptr) {
-    if (dup_ptr == NULL) {
-        return 1;
-    }
-    *dup_ptr = strdup(str);
-    if (*dup_ptr == NULL) {
-        return 1;
-    }
-    return 0;
-}
-
 int add_builtins(const Map *map) {
     if (map == NULL) {
         return 1;
@@ -523,28 +512,9 @@ VarType *parse_expression(const ASTNode **nodes,
                             "error: incompatible argument type\n");
                     return NULL;
                 }
-                /*
-                arg_expr = malloc(sizeof(*arg_expr));
-                if (arg_expr == NULL) {
-                    print_ICE("unable to allocate memory");
-                    return NULL;
-                }
-                arg_expr->type = EXPR_VALUE;
-                arg_expr->node = arg_node;
-                 */
                 safe_method_call((*expr_ptr)->args, append, arg_node);
             }
             ret_type = function->ret_type;
-            /*
-            while (ret_type->type == FUNCTION) {
-                function = ret_type->function;
-                arg_count = function->named_args->size(function->named_args);
-                if (arg_count == 0) {
-                    ret_type = function->ret_type;
-                } else {
-                    break;
-                }
-            }*/
             return ret_type;
         case BUILTIN:
             (*expr_ptr)->type = EXPR_VALUE;
@@ -713,6 +683,18 @@ int GetType_Function(const void *this,
     ASTFunctionData *data = node->data;
     data->symbols->free(data->symbols, free_VarType);
     safe_method_call(symbols, copy, &data->symbols, copy_VarType);
+    /*{
+        char **keys = NULL;
+        int count;
+        size_t *lengths;
+        safe_method_call(symbols, keys, &count, &lengths, &keys);
+        for (int i = 0; i < count; i++) {
+            safe_method_call(data->locals, put, keys[i], lengths[i], 0, NULL);
+            free(keys[i]);
+        }
+        free(keys);
+        free(lengths);
+    }*/
     for (int i = 0; i < assigned_vars->size(assigned_vars); i++) {
         char *var = NULL;
         safe_method_call(assigned_vars, get, i, &var);
@@ -765,6 +747,7 @@ int GetType_Function(const void *this,
             //TODO: Handle argument type conflict with outer scope variable
             free_VarType(prev_type);
         }
+        safe_method_call(data->locals, put, args[i]->name, arg_len, NULL, NULL);
     }
     free(args);
     assigned_vars->clear(assigned_vars, NULL);
@@ -790,7 +773,7 @@ int GetType_Function(const void *this,
     free(stmt_arr);
     if (err) return 1;
     *type_ptr = data->type;
-    ASTNode *program_ast = program_node;
+    const ASTNode *program_ast = program_node;
 	ASTProgramData *program_data = program_ast->data;
 	int *n = malloc(sizeof(int));
 	if (n == NULL) {

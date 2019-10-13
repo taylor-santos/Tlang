@@ -31,7 +31,7 @@ void print_Map(const Map *this, void (*printer)(const void*)) {
         for (Entry *curr = data->entries[i]; curr != NULL; curr = curr->next) {
             const void *val = curr->value;
             printf("%s", sep);
-            printf("\"0x%.*x\": \"", (int)curr->len, (char*)curr->key);
+            printf("\"0x%.*x\": \"", (int)curr->len, (void*)curr->key);
             printer(val);
             printf("\"");
             sep = ",\n  ";

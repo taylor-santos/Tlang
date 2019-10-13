@@ -51,6 +51,8 @@
     void safe_vfprintf()
 
 int asprintf(char **strp, const char *fmt, ...);
+int append_string(char **strp, const char *fmt, ...);
+int strdup_safe(const char *str, char **dup_ptr);
 
 #define safe_asprintf(strp, fmt, ...) { \
         if (asprintf(strp, fmt, __VA_ARGS__) < 0) { \
