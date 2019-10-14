@@ -42,7 +42,7 @@ static void free_program(const void *this) {
     const ASTNode *node = this;
     ASTProgramData *data = node->data;
     data->statements->free(data->statements, free_ASTNode);
-    data->symbols->free(data->symbols, NULL);
+    data->symbols->free(data->symbols, free_VarType);
     data->func_defs->free(data->func_defs, free);
     free(data->loc);
     free(node->data);
@@ -460,8 +460,9 @@ static void free_function(const void *this) {
     free_VarType(data->type);
     data->stmts->free(data->stmts, free_ASTNode);
     data->symbols->free(data->symbols, free_VarType);
-    data->env->free(data->env, free);
+    data->env->free(data->env, free_VarType);
     data->locals->free(data->locals, NULL);
+    data->assigned->free(data->assigned, NULL);
     free(data->loc);
     free(node->data);
     free(node->vtable);
@@ -525,6 +526,7 @@ const ASTNode *new_FunctionNode(struct YYLTYPE *loc,
     data->symbols = new_Map(0, 0);
     data->env = new_Map(0, 0);
     data->locals = new_Map(0, 0);
+    data->assigned = new_Map(0, 0);
     safe_function_call(new_VarType_from_FuncType, signature, &data->type);
     vtable->free =     free_function;
     vtable->json =     json_function;

@@ -640,7 +640,9 @@ int GetType_TypedVar(const void *this,
         return 0;
     } else {
         *type_ptr = data->given_type;
-        safe_method_call(symbols, put, data->name, len, *type_ptr, NULL);
+        VarType *type_copy = NULL;
+        safe_function_call(copy_VarType, *type_ptr, &type_copy);
+        safe_method_call(symbols, put, data->name, len, type_copy, NULL);
         data->type = *type_ptr;
         return 0;
     }
@@ -683,18 +685,8 @@ int GetType_Function(const void *this,
     ASTFunctionData *data = node->data;
     data->symbols->free(data->symbols, free_VarType);
     safe_method_call(symbols, copy, &data->symbols, copy_VarType);
-    /*{
-        char **keys = NULL;
-        int count;
-        size_t *lengths;
-        safe_method_call(symbols, keys, &count, &lengths, &keys);
-        for (int i = 0; i < count; i++) {
-            safe_method_call(data->locals, put, keys[i], lengths[i], 0, NULL);
-            free(keys[i]);
-        }
-        free(keys);
-        free(lengths);
-    }*/
+    data->env->free(data->env, free_VarType);
+    safe_method_call(data->symbols, copy, &data->env, copy_VarType);
     for (int i = 0; i < assigned_vars->size(assigned_vars); i++) {
         char *var = NULL;
         safe_method_call(assigned_vars, get, i, &var);
@@ -708,8 +700,8 @@ int GetType_Function(const void *this,
             fprintf(stderr, "Possible type conflict???\n");
             free_VarType(prev_type);
         }
+        safe_method_call(data->assigned, put, var, len, NULL, NULL);
     }
-    safe_method_call(data->symbols, copy, &data->env, copy_VarType);
     if (data->signature->extension != NULL) {
         VarType *type_copy = NULL;
         safe_function_call(copy_VarType,
@@ -848,8 +840,7 @@ int AssignType_Variable(const void *this, VarType *type, const Map *symbols) {
             return 1;
         }
     } else {
-        //safe_function_call(copy_VarType, type, &put_type);
-        put_type = type;
+        safe_function_call(copy_VarType, type, &put_type);
         safe_method_call(symbols, put, data->name, len, put_type, NULL);
     }
     data->type = put_type; // Store the inferred type for later

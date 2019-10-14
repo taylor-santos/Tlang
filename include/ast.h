@@ -216,6 +216,7 @@ struct ast_function_data {
     const Map      *symbols; // Map<char*, VarType*>
     const Map      *env;     // Map<char*, int>
     const Map      *locals;  // Map<char*, int>
+    const Map      *assigned;// Map<char*, int>
 };
 struct ast_function_vtable {
     void (*free)    (const void*);
