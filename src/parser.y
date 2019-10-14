@@ -162,9 +162,9 @@ sub_expr:
         {
             $$ = new_ParenNode(&@$, new_ExpressionNode(&@$, $2));
         }
-  | T_REF
+  | T_REF sub_expr
         {
-            $$ = new_RefNode(&@$);
+            $$ = new_RefNode(&@$, $2);
         }
 
 l_value:

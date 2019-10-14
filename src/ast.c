@@ -352,7 +352,7 @@ static void json_ref(const void *this, int indent, FILE *out) {
     fprintf(out, "%*s}", indent * JSON_TAB_WIDTH, "");
 }
 
-const ASTNode *new_RefNode(struct YYLTYPE *loc) {
+const ASTNode *new_RefNode(struct YYLTYPE *loc, const ASTNode *expr) {
     ASTNode *node = malloc(sizeof(*node));
     if (node == NULL) {
         return NULL;
@@ -379,6 +379,7 @@ const ASTNode *new_RefNode(struct YYLTYPE *loc) {
     }
     memcpy(data->loc, loc, sizeof(*loc));
     safe_function_call(new_RefType, &data->type);
+    data->expr       = expr;
     vtable->free     = free_ref;
     vtable->json     = json_ref;
     vtable->get_type = GetType_Ref;

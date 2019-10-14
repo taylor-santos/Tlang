@@ -19,8 +19,7 @@ int add_builtins(const Map *map) {
         return 1;
     }
     size_t n;
-    /*
-    const char *binops[] = { "chr_0x2B", "chr_0x2D", "chr_0x2A", "chr_0x2F" };
+    const char *binops[] = { "+" };
     n = sizeof(binops) / sizeof(*binops);
     for (size_t i = 0; i < n; i++) {
         VarType *arg_type = NULL;
@@ -41,14 +40,20 @@ int add_builtins(const Map *map) {
             &func->extension);
         VarType *func_type = NULL;
         safe_function_call(new_VarType_from_FuncType, func, &func_type);
+        char *name;
+        asprintf(&name, "var_0x%X", binops[i][0]);
+        size_t len = strlen(binops[i]);
+        for (size_t j = 1; j < len; j++) {
+            append_string(&name, "%X", binops[i][j]);
+        }
         safe_method_call(map,
                          put,
-                         binops[i],
-                         strlen(binops[i]),
+                         name,
+                         strlen(name),
                          func_type,
                          NULL);
+        free(name);
     }
-     */
     const char *builtins[] = { "var_println" };
     n = sizeof(builtins) / sizeof(*builtins);
     for (size_t i = 0; i < n; i++) {
@@ -474,7 +479,6 @@ VarType *parse_expression(const ASTNode **nodes,
     VarType *node_type = NULL, *arg_type, *ret_type;
     NamedArg *expected_type = NULL;
     FuncType *function;
-    Expression *arg_expr;
     int arg_count, i;
 
     if (vtable->get_type(node, symbols, program_node, &node_type)) return NULL;
@@ -514,32 +518,65 @@ VarType *parse_expression(const ASTNode **nodes,
                 }
                 safe_method_call((*expr_ptr)->args, append, arg_node);
             }
-            ret_type = function->ret_type;
+            if (function->extension == NULL) {
+                ret_type = function->ret_type;
+            } else {
+                ret_type = node_type;
+            }
             return ret_type;
         case BUILTIN:
             (*expr_ptr)->type = EXPR_VALUE;
-            return node_type;
+            ret_type = node_type;
+            break;
         case REFERENCE:
-            if (size == 1) {
-                //TODO: Handle dangling reference
-                fprintf(stderr,
-                        "error: dangling reference\n");
-                return NULL;
-            } else if (size != 2) {
+            if (size != 1) {
                 //TODO: Handle arguments after reference
                 fprintf(stderr,
                         "error: arguments after reference\n");
                 return NULL;
             }
             (*expr_ptr)->type = EXPR_VALUE;
-            node = nodes[1];
+            ASTRefData *ref_data = node->data;
+            node = ref_data->expr;
             vtable = node->vtable;
             if (vtable->get_type(node, symbols, program_node, &ret_type)) {
                 return NULL;
             }
-            return ret_type;
+            break;
+        default:
+            return NULL;
     }
-    return NULL;
+    if (size > 1) {
+        Expression *func_expr;
+        VarType *new_type = parse_expression(nodes + 1,
+                                             size - 1,
+                                             symbols,
+                                             program_node,
+                                             &func_expr);
+        if (new_type == NULL) return NULL;
+        if (new_type->type != FUNCTION
+            || new_type->function->extension == NULL) {
+            //TODO: Handle 2nd argument isn't an extension function
+            fprintf(stderr,
+                    "error: expression is not an extension function\n");
+            return NULL;
+        }
+        NamedArg *ext = new_type->function->extension;
+        if (typecmp(ret_type, ext->type)) {
+            //TODO: Handle incompatible argument type
+            fprintf(stderr,
+                    "error: incompatible argument type\n");
+            return NULL;
+        }
+        func_expr->extension = node;
+        free(*expr_ptr);
+        *expr_ptr = func_expr;
+        free_VarType(ret_type);
+        safe_function_call(copy_VarType,
+                           new_type->function->ret_type,
+                           &ret_type);
+    }
+    return ret_type;
 }
 
 int GetType_Expression(const void *this,
@@ -697,10 +734,10 @@ int GetType_Function(const void *this,
         safe_method_call(data->symbols, put, var, len, type_copy, &prev_type);
         if (prev_type != NULL) {
             //TODO: Verify type compatibility
-            fprintf(stderr, "Possible type conflict???\n");
             free_VarType(prev_type);
         }
-        safe_method_call(data->assigned, put, var, len, NULL, NULL);
+        void *prev = NULL;
+        safe_method_call(data->assigned, put, var, len, NULL, &prev);
     }
     if (data->signature->extension != NULL) {
         VarType *type_copy = NULL;
@@ -740,6 +777,11 @@ int GetType_Function(const void *this,
             free_VarType(prev_type);
         }
         safe_method_call(data->locals, put, args[i]->name, arg_len, NULL, NULL);
+    }
+    if (signature->extension != NULL) {
+        char *name = signature->extension->name;
+        size_t len = strlen(name);
+        safe_method_call(data->locals, put, name, len, NULL, NULL);
     }
     free(args);
     assigned_vars->clear(assigned_vars, NULL);
@@ -802,7 +844,6 @@ int GetType_Class(const void *this,
         safe_method_call(data->symbols, put, var, len, type_copy, &prev_type);
         if (prev_type != NULL) {
             //TODO: Verify type compatibility
-            fprintf(stderr, "Possible type conflict???\n");
             free_VarType(prev_type);
         }
     }

@@ -112,7 +112,6 @@ int main(int argc, char *argv[]) {
             } else {
                 printf("Type checker failed!\n");
             }
-		    vtable->free(AST);
 	    }
 
         yy_delete_buffer(state, scanner);

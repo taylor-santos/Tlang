@@ -145,6 +145,7 @@ typedef struct ast_ref_vtable ASTRefVTable;
 struct ast_ref_data {
     struct YYLTYPE *loc;
     VarType        *type;
+    const ASTNode  *expr;
 };
 struct ast_ref_vtable {
     void (*free)      (const void*);
@@ -152,7 +153,7 @@ struct ast_ref_vtable {
     char*(*codegen) (const void*, void*, FILE*);
     int  (*get_type)(const void*, const Map*, const void*, VarType**);
 };
-const ASTNode *new_RefNode(struct YYLTYPE *loc);
+const ASTNode *new_RefNode(struct YYLTYPE *loc, const ASTNode *expr);
 
 
 /* Paren Node < Statement Node */
