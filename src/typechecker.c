@@ -122,6 +122,7 @@ int new_VarType(const char *type, VarType **vartype_ptr) {
         return 0;
     } else {
         //TODO: Create VarTypes from classes
+        fprintf(stderr, "error: invalid type statement\n");
         return 1;
     }
 }
@@ -493,6 +494,7 @@ VarType *parse_expression(const ASTNode **nodes,
             function = node_type->function;
             (*expr_ptr)->type = EXPR_FUNC;
             (*expr_ptr)->args = new_Vector(0);
+            (*expr_ptr)->extension = NULL;
             arg_count = function->named_args->size(function->named_args);
             if (arg_count != size - 1) {
                 //TODO: Handle incorrect argument count
@@ -571,10 +573,7 @@ VarType *parse_expression(const ASTNode **nodes,
         func_expr->extension = node;
         free(*expr_ptr);
         *expr_ptr = func_expr;
-        free_VarType(ret_type);
-        safe_function_call(copy_VarType,
-                           new_type->function->ret_type,
-                           &ret_type);
+        ret_type = new_type->function->ret_type;
     }
     return ret_type;
 }

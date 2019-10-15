@@ -377,6 +377,7 @@ char *CodeGen_Expression(const void *this, void *state, FILE *out) {
             free(func_code);
             if (expr->extension != NULL) {
                 fprintf(out, ", %s", ext_code);
+                free(ext_code);
             }
             for (int i = 0; i < arg_count; i++) {
                 fprintf(out, ", %s", arg_codes[i]);

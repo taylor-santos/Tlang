@@ -330,6 +330,7 @@ static void free_ref(const void *this) {
     const ASTNode *node = this;
     ASTRefData *data = node->data;
     free_VarType(data->type);
+    free_ASTNode((void*)data->expr);
     free(data->loc);
     free(node->data);
     free(node->vtable);
@@ -685,7 +686,7 @@ static void free_typed_var(const void *this) {
     const ASTNode *node = this;
     ASTTypedVarData *data = node->data;
     free(data->name);
-    free(data->given_type);
+    free_VarType(data->given_type);
     free(data->loc);
     free(node->data);
     free(node->vtable);
