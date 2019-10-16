@@ -463,8 +463,8 @@ static void free_function(const void *this) {
     data->stmts->free(data->stmts, free_ASTNode);
     data->symbols->free(data->symbols, free_VarType);
     data->env->free(data->env, free_VarType);
-    data->locals->free(data->locals, NULL);
-    data->assigned->free(data->assigned, NULL);
+    data->args->free(data->args, NULL);
+    data->self->free(data->self, NULL);
     free(data->loc);
     free(node->data);
     free(node->vtable);
@@ -527,8 +527,8 @@ const ASTNode *new_FunctionNode(struct YYLTYPE *loc,
     data->stmts = stmts;
     data->symbols = new_Map(0, 0);
     data->env = new_Map(0, 0);
-    data->locals = new_Map(0, 0);
-    data->assigned = new_Map(0, 0);
+    data->args = new_Map(0, 0);
+    data->self = new_Map(0, 0);
     safe_function_call(new_VarType_from_FuncType, signature, &data->type);
     vtable->free =     free_function;
     vtable->json =     json_function;

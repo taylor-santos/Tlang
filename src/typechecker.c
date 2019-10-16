@@ -736,7 +736,7 @@ int GetType_Function(const void *this,
             free_VarType(prev_type);
         }
         void *prev = NULL;
-        safe_method_call(data->assigned, put, var, len, NULL, &prev);
+        safe_method_call(data->self, put, var, len, NULL, &prev);
     }
     if (data->signature->extension != NULL) {
         VarType *type_copy = NULL;
@@ -775,12 +775,12 @@ int GetType_Function(const void *this,
             //TODO: Handle argument type conflict with outer scope variable
             free_VarType(prev_type);
         }
-        safe_method_call(data->locals, put, args[i]->name, arg_len, NULL, NULL);
+        safe_method_call(data->args, put, args[i]->name, arg_len, NULL, NULL);
     }
     if (signature->extension != NULL) {
         char *name = signature->extension->name;
         size_t len = strlen(name);
-        safe_method_call(data->locals, put, name, len, NULL, NULL);
+        safe_method_call(data->args, put, name, len, NULL, NULL);
     }
     free(args);
     assigned_vars->clear(assigned_vars, NULL);

@@ -61,7 +61,7 @@
 %token<double_val> T_DOUBLE
 %token<str_val>    T_IDENT
 
-%type<ast>       file statement l_value r_expr sub_expr expression
+%type<ast>       file statement l_value r_expr sub_expr expression func_block
 %type<vec>       stmts opt_args args opt_named_args named_args call_list
                  opt_inheritance inheritance opt_stmts
 %type<var_type>  type_def opt_return_type
@@ -112,15 +112,26 @@ statement:
             $$ = new_ReturnNode(&@$, NULL);
         }
 
+func_block:
+    opt_named_extension named_func_def opt_stmts
+        {
+            $2->extension = $1;
+            $$ = new_FunctionNode(&@$, $2, $3);
+        }
+
 expression:
     call_list T_NEWLINE
         {
             $$ = new_ExpressionNode(&@$, $1);
         }
-  | opt_named_extension named_func_def opt_stmts
+  | func_block
         {
-            $2->extension = $1;
-            $$ = new_FunctionNode(&@$, $2, $3);
+            $$ = $1;
+            /*
+            const Vector *v = new_Vector(1);
+            safe_method_call(v, append, $1);
+            $$ = new_ExpressionNode(&@$, v);
+             */
         }
   | T_CLASS opt_inheritance opt_stmts
         {
@@ -165,6 +176,10 @@ sub_expr:
   | T_REF sub_expr
         {
             $$ = new_RefNode(&@$, $2);
+        }
+  | '(' func_block ')'
+        {
+            $$ = $2;
         }
 
 l_value:

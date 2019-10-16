@@ -24,7 +24,7 @@ static void define_closures(FILE *out) {
     print_indent(1, out);
     fprintf(out, "void *fn;\n");
     print_indent(1, out);
-    fprintf(out, "void **env;\n");
+    fprintf(out, "void ***env;\n");
     print_indent(1, out);
     fprintf(out, "size_t env_size;\n");
     fprintf(out, "} closure;\n");
@@ -47,21 +47,21 @@ static void define_closures(FILE *out) {
     fprintf(out, "}\n");
     fprintf(out, "\n");
     fprintf(out, "#define call(c, ...) ((void*(*)())((closure*)c)->fn)"
-                 "(((closure*)c)->env, __VA_ARGS__)\n");
-    fprintf(out, "#define alloc(...) memcpy(malloc(sizeof((void*[])"
-                 "{__VA_ARGS__}) + sizeof(void*)), (void*[]){__VA_ARGS__}, "
-                 "sizeof((void*[]){__VA_ARGS__}))\n");
+                 "(((closure*)c)->env, ##__VA_ARGS__)\n");
+    fprintf(out, "#define alloc(...) memcpy(malloc(sizeof((void**[])"
+                 "{__VA_ARGS__}) + sizeof(void**)), (void**[]){__VA_ARGS__}, "
+                 "sizeof((void**[]){__VA_ARGS__}))\n");
     fprintf(out, "#define build_closure(c_ptr, fn, ...) { \\\n");
     print_indent(1, out);
     fprintf(out, "closure *c = malloc(sizeof(closure)); \\\n");
     print_indent(1, out);
     fprintf(out, "memcpy(c, &(closure){ fn, alloc(__VA_ARGS__), "
-                 "sizeof((void*[]){__VA_ARGS__})/sizeof(void*) }, "
+                 "sizeof((void**[]){__VA_ARGS__})/sizeof(void**) }, "
                  "sizeof(closure)); \\\n");
     print_indent(1, out);
-    fprintf(out, "c->env[c->env_size++] = c; \\\n");
-    print_indent(1, out);
     fprintf(out, "*c_ptr = c; \\\n");
+    print_indent(1, out);
+    fprintf(out, "c->env[c->env_size++] = c_ptr; \\\n");
     fprintf(out, "}\n\n");
 }
 
@@ -111,7 +111,7 @@ static int define_functions(CodegenState *state, FILE *out) {
         }
         int *index = NULL;
         safe_method_call(state->func_defs, get, node, sizeof(node), &index);
-        fprintf(out, "func%d(void**", *index);
+        fprintf(out, "func%d(void***", *index);
         if (data->signature->extension != NULL) {
             fprintf(out, ", void*");
         }
@@ -135,7 +135,7 @@ static int define_functions(CodegenState *state, FILE *out) {
         }
         int *index = NULL;
         safe_method_call(state->func_defs, get, node, sizeof(node), &index);
-        fprintf(out, "func%d(void **env", *index);
+        fprintf(out, "func%d(void ***env", *index);
         if (data->signature->extension != NULL) {
             fprintf(out, ", void *%s", data->signature->extension->name);
         }
@@ -148,6 +148,7 @@ static int define_functions(CodegenState *state, FILE *out) {
         free(args);
         fprintf(out, ") {\n");
         state->indent++;
+        int no_vars = 1;
         {
             const char **symbols = NULL;
             int symbol_count;
@@ -157,69 +158,71 @@ static int define_functions(CodegenState *state, FILE *out) {
                              &symbol_count,
                              &lengths,
                              &symbols);
-            if (symbol_count > 0) {
-                print_indent(state->indent, out);
-            }
             char *sep = "void *";
             for (int j = 0; j < symbol_count; j++) {
-                if (data->locals->contains(
-                        data->locals,
+                if (data->args->contains(
+                        data->args,
                         symbols[j],
                         lengths[j])) {
                     free((char *) symbols[j]);
                     continue;
                 }
+                if (data->env->contains(
+                        data->env,
+                        symbols[j],
+                        lengths[j])) {
+                    free((char *) symbols[j]);
+                    continue;
+                }
+                if (data->self->contains(
+                        data->self,
+                        symbols[j],
+                        lengths[j])) {
+                    free((char *) symbols[j]);
+                    continue;
+                }
+                if (no_vars) print_indent(state->indent, out);
+                no_vars = 0;
                 fprintf(out, "%s%.*s", sep, (int) lengths[j], symbols[j]);
                 sep = ", *";
                 free((char *) symbols[j]);
             }
-            fprintf(out, ";\n");
+            if (!no_vars) fprintf(out, ";\n");
             free(lengths);
             free(symbols);
         }
-        int env_end_index;
-        {
-            const char **symbols = NULL;
-            int symbol_count;
-            size_t *lengths;
-            safe_method_call(data->env,
-                             keys,
-                             &symbol_count,
-                             &lengths,
-                             &symbols);
-            env_end_index = symbol_count;
-            for (int j = 0; j < symbol_count; j++) {
-                print_indent(1, out);
-                fprintf(out,
-                        "%.*s = env[%d];\n",
-                        (int) lengths[j],
-                        symbols[j],
-                        j);
-                free((char *) symbols[j]);
-            }
-            free(lengths);
-            free(symbols);
+        const char **env = NULL;
+        int env_count;
+        size_t *env_lengths;
+        safe_method_call(data->env,
+                         keys,
+                         &env_count,
+                         &env_lengths,
+                         &env);
+        int env_end_index = env_count;
+        for (int j = 0; j < env_count; j++) {
+            print_indent(1, out);
+            fprintf(out,
+                    "#define %.*s *env[%d]\n",
+                    (int) env_lengths[j],
+                    env[j],
+                    j);
         }
-        {
-            const char **symbols = NULL;
-            int symbol_count;
-            size_t *lengths;
-            safe_method_call(data->assigned,
-                             keys,
-                             &symbol_count,
-                             &lengths,
-                             &symbols);
-            for (int j = 0; j < symbol_count; j++) {
-                print_indent(1, out);
-                fprintf(out,
-                        "%.*s = env[%d];\n",
-                        (int) lengths[j],
-                        symbols[j],
-                        env_end_index);
-                free((char *) symbols[j]);
-            }
-            free(lengths);
-            free(symbols);
+        const char **assigned = NULL;
+        int assigned_count;
+        size_t *assigned_lengths;
+        safe_method_call(data->self,
+                         keys,
+                         &assigned_count,
+                         &assigned_lengths,
+                         &assigned);
+        for (int j = 0; j < assigned_count; j++) {
+            print_indent(1, out);
+            fprintf(out,
+                    "#define %.*s *env[%d]\n",
+                    (int) assigned_lengths[j],
+                    assigned[j],
+                    env_end_index);
         }
 
         ASTNode **stmts = NULL;
@@ -234,6 +237,26 @@ static int define_functions(CodegenState *state, FILE *out) {
             free(code);
         }
         free(stmts);
+        for (int j = 0; j < env_count; j++) {
+            print_indent(1, out);
+            fprintf(out,
+                    "#undef %.*s\n",
+                    (int) env_lengths[j],
+                    env[j]);
+            free((char*)env[j]);
+        }
+        free(env_lengths);
+        free(env);
+        for (int j = 0; j < assigned_count; j++) {
+            print_indent(1, out);
+            fprintf(out,
+                    "#undef %.*s\n",
+                    (int) assigned_lengths[j],
+                    assigned[j]);
+            free((char *) assigned[j]);
+        }
+        free(assigned_lengths);
+        free(assigned);
         state->indent--;
         fprintf(out, "}\n");
         fprintf(out, "\n");
@@ -262,10 +285,12 @@ int define_main(ASTProgramData *data, CodegenState *state, FILE *out) {
     free(lengths);
     free(symbols);
 
-    print_indent(state->indent, out);
-    fprintf(out, "build_closure(&var_println, builtin_println);\n");
-    print_indent(state->indent, out);
-    fprintf(out, "build_closure(&var_0x%X, builtin_0x%X);\n", '+', '+');
+    const char *builtins[] = {"println", "0x2B"};
+
+    for (size_t i = 0; i < sizeof(builtins) / sizeof(*builtins); i++) {
+        print_indent(state->indent, out);
+        fprintf(out, "build_closure(&var_%s, builtin_%s);\n", builtins[i], builtins[i]);
+    }
 
     ASTNode **stmts = NULL;
     int stmt_count;
@@ -428,7 +453,7 @@ char *CodeGen_Function(const void *this, void *state, FILE *out) {
                      &symbols);
     char *sep = "";
     for (int j = 0; j < symbol_count; j++) {
-        fprintf(out, "%s%.*s", sep, (int)lengths[j], symbols[j]);
+        fprintf(out, "%s&%.*s", sep, (int)lengths[j], symbols[j]);
         sep = ", ";
         free((void*)symbols[j]);
     }

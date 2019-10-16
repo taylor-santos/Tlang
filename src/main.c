@@ -102,9 +102,9 @@ int main(int argc, char *argv[]) {
             status = 1;
         } else {
             ASTProgramVTable *vtable = AST->vtable;
+            vtable->json(AST, 0, stdout);
+            printf("\n");
             if (!vtable->type_check(AST)) {
-                //vtable->json(AST, 0, stdout);
-                //fprintf(stdout, "\n");
                 if (!vtable->codegen(AST, NULL, output)) {
                 } else {
                     printf("Code generation failed!\n");
@@ -112,6 +112,8 @@ int main(int argc, char *argv[]) {
             } else {
                 printf("Type checker failed!\n");
             }
+            ASTProgramData *data = AST->data;
+            print_Map(data->symbols, print_VarType);
 		    vtable->free(AST);
 	    }
 
