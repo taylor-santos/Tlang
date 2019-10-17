@@ -220,7 +220,7 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
 
     func     { push_token((Token){.type=T_FUNC}); }
     return   { push_token((Token){.type=T_RETURN}); }
-    &        { push_token((Token){.type=T_REF}); }
+    ref      { push_token((Token){.type=T_REF}); }
     class    { push_token((Token){.type=T_CLASS}); }
     int      { push_token((Token){.type=T_IDENT,
                                   .value.str_val=strdup(yytext)}); }

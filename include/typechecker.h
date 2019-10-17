@@ -16,6 +16,7 @@ struct var_type {
         enum { INT, DOUBLE } builtin;
         FuncType *function;
         VarType *ret_type;
+        VarType *ref_type;
     };
 };
 
@@ -39,7 +40,7 @@ void free_NamedArg(void*);
 int new_VarType(const char *type, VarType **vartype_ptr);
 int new_ReturnType(VarType *ret_type, VarType **vartype_ptr);
 int new_NoneType (VarType **vartype_ptr);
-int new_RefType  (VarType **vartype_ptr);
+int new_RefType  (VarType **vartype_ptr, VarType *ref_type);
 int new_ClassType(VarType **vartype_ptr);
 int new_VarType_from_FuncType(FuncType *type, VarType **vartype_ptr);
 int new_NamedArg(char *name, VarType *type, NamedArg **namedarg_ptr);

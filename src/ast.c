@@ -379,7 +379,7 @@ const ASTNode *new_RefNode(struct YYLTYPE *loc, const ASTNode *expr) {
         return NULL;
     }
     memcpy(data->loc, loc, sizeof(*loc));
-    safe_function_call(new_RefType, &data->type);
+    data->type = NULL;
     data->expr       = expr;
     vtable->free     = free_ref;
     vtable->json     = json_ref;
@@ -934,7 +934,11 @@ static void json_VarType(const void *this, int indent, FILE *out) {
             fprintf(out, "\n");
             break;
         case REFERENCE:
-            fprintf(out, "\"ref\"\n");
+            fprintf(out, "\"ref\",\n");
+            fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
+            fprintf(out, "\"ref_type\": ");
+            json_VarType(type->ref_type, indent, out);
+            fprintf(out, "\n");
             break;
         case CLASS:
             fprintf(out, "\"class\"\n");

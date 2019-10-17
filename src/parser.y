@@ -64,7 +64,7 @@
 %type<ast>       file statement l_value r_expr sub_expr expression func_block
 %type<vec>       stmts opt_args args opt_named_args named_args call_list
                  opt_inheritance inheritance opt_stmts
-%type<var_type>  type_def opt_return_type
+%type<var_type>  type_def opt_return_type type
 %type<func_type> func_def named_func_def
 %type<named_arg> named_type_def opt_extension opt_named_extension
 
@@ -189,6 +189,16 @@ l_value:
         }
 
 type_def:
+    type
+        {
+            $$ = $1;
+        }
+  | T_REF type
+        {
+            safe_function_call(new_RefType, &$$, $2);
+        }
+
+type:
     T_IDENT
         {
             safe_function_call(new_VarType, $1, &$$);

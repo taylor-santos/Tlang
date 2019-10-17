@@ -216,8 +216,8 @@ struct ast_function_data {
     const Vector   *stmts;   // Vector<ASTNode*>
     const Map      *symbols; // Map<char*, VarType*>
     const Map      *env;     // Map<char*, int>
-    const Map      *locals;  // Map<char*, int>
-    const Map      *assigned;// Map<char*, int>
+    const Map      *args;    // Map<char*, int>
+    const Map      *self;    // Map<char*, int>
 };
 struct ast_function_vtable {
     void (*free)    (const void*);
