@@ -19,7 +19,7 @@
     void print_ICE()
 
 #define safe_method_call(obj, fn, ...) { \
-        if ((obj)->fn(obj, __VA_ARGS__)) { \
+        if ((obj)->fn(obj, ##__VA_ARGS__)) { \
             print_ICE(#obj "->" #fn "(" #__VA_ARGS__ ") failed"); \
         } \
     } \
@@ -33,7 +33,7 @@
     void safe_function_call()
 
 #define safe_fprintf(out, ...) { \
-        if (fprintf(out, __VA_ARGS__) < 0) { \
+        if (fprintf(out, ##__VA_ARGS__) < 0) { \
             print_ICE("file printing failed"); \
             fclose(out); \
             exit(EXIT_FAILURE); \
@@ -55,7 +55,7 @@ int append_string(char **strp, const char *fmt, ...);
 int strdup_safe(const char *str, char **dup_ptr);
 
 #define safe_asprintf(strp, fmt, ...) { \
-        if (asprintf(strp, fmt, __VA_ARGS__) < 0) { \
+        if (asprintf(strp, fmt, ##__VA_ARGS__) < 0) { \
             print_ICE("file printing failed"); \
             exit(EXIT_FAILURE); \
         } \

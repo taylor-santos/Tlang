@@ -439,7 +439,10 @@ int GetType_Assignment(const void *this,
     }
     lhs_vtable->get_vars(lhs);
     *type_ptr = NULL;
-    err = rhs_vtable->get_type(rhs, symbols, program_node, type_ptr) || err;
+    if (rhs_vtable->get_type(rhs, symbols, program_node, type_ptr)) {
+        return 1;
+    }
+    data->type = *type_ptr;
     assigned_vars->clear(assigned_vars, NULL);
     if (*type_ptr == NULL) {
         return 1;
@@ -641,6 +644,7 @@ int GetType_Paren(const void *this,
     ASTParenData       *data   = node->data;
     ASTStatementVTable *vtable = data->val->vtable;
     int result =  vtable->get_type(data->val, symbols, program_node, type_ptr);
+    data->type = *type_ptr;
     return result;
 }
 

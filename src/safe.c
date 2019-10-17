@@ -19,7 +19,7 @@ int asprintf(char **strp, const char *fmt, ...) {
 
 int append_string(char **strp, const char *fmt, ...) {
     va_list args;
-    size_t added_size, old_size = strlen(*strp);
+    size_t added_size, old_size = *strp ? strlen(*strp) : 0;
 
     va_start(args, fmt);
     added_size = vsnprintf(NULL, 0, fmt, args);

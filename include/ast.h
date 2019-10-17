@@ -89,9 +89,9 @@ typedef struct ast_assignment_data   ASTAssignmentData;
 typedef struct ast_assignment_vtable ASTAssignmentVTable;
 struct ast_assignment_data {
     struct YYLTYPE *loc;
+    VarType        *type;
     const void     *lhs;
     const void     *rhs;
-    VarType        *type;
 };
 struct ast_assignment_vtable {
     void (*free)    (const void*);
