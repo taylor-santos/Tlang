@@ -225,6 +225,7 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
     int    { push_token((Token){.type=T_IDENT, .value.str_val=strdup(yytext)});}
     double { push_token((Token){.type=T_IDENT, .value.str_val=strdup(yytext)});}
     ->     { push_token((Token){.type=T_ARROW}); }
+    :=     { push_token((Token){.type=T_DEFINE}); }
     [=:\(\),\[\]] {
         push_token((Token){.type=*yytext});
     }

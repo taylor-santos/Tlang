@@ -8,6 +8,7 @@
 
 char *CodeGen_Program   (const void *this, void *state, FILE *out);
 char *CodeGen_Assignment(const void *this, void *state, FILE *out);
+char *CodeGen_Def       (const void *this, void *state, FILE *out);
 char *CodeGen_Return    (const void *this, void *state, FILE *out);
 char *CodeGen_Expression(const void *this, void *state, FILE *out);
 char *CodeGen_Ref       (const void *this, void *state, FILE *out);

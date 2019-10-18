@@ -318,6 +318,11 @@ static int copy_VarType(const void *type, const void *copy_ptr) {
                                VT_type->sub_type,
                                &(*VT_copy_ptr)->sub_type);
             break;
+        case HOLD:
+            safe_function_call(copy_VarType,
+                               VT_type->sub_type,
+                               &(*VT_copy_ptr)->sub_type);
+            break;
         case CLASS:
             break;
     }
@@ -438,28 +443,87 @@ int GetType_Assignment(const void *this,
     if (type_ptr == NULL) {
         return 1;
     }
-    int err = 0;
     const ASTNode     *node = this;
     ASTAssignmentData *data = node->data;
     const ASTNode *lhs = data->lhs;
     const ASTNode *rhs = data->rhs;
-    ASTLExprVTable      *lhs_vtable = lhs->vtable;
+    ASTExpressionVTable *lhs_vtable = lhs->vtable;
     ASTAssignmentVTable *rhs_vtable = rhs->vtable;
-    if (assigned_vars == NULL) {
-        assigned_vars = new_Vector(0);
-    }
-    lhs_vtable->get_vars(lhs);
+
     *type_ptr = NULL;
     if (rhs_vtable->get_type(rhs, symbols, program_node, type_ptr)) {
         return 1;
     }
+    data->type = *type_ptr;
+    if (*type_ptr == NULL) {
+        return 1;
+    }
+    VarType *lhs_type;
+    if (lhs_vtable->get_type(lhs, symbols, program_node, &lhs_type)) {
+        //TODO: Handle type reassignment error
+        fprintf(stderr, "error: type reassignment\n");
+        return 1;
+    }
+    if (typecmp(lhs_type, *type_ptr, 0)) {
+        //TODO: Handle assignment type incompatibility
+        fprintf(stderr, "error: incompatible type in assignment\n");
+        return 1;
+    }
+    return 0;
+}
+
+int GetType_Def(const void *this,
+                const Map *symbols,
+                const void *program_node,
+                VarType **type_ptr) {
+    if (type_ptr == NULL) {
+        return 1;
+    }
+    int err = 0;
+    const ASTNode *node = this;
+    ASTDefData *data = node->data;
+    const ASTNode *lhs = data->lhs;
+    const ASTNode *rhs = data->rhs;
+    ASTLExprVTable *lhs_vtable = lhs->vtable;
+    ASTDefVTable *rhs_vtable = rhs->vtable;
+    if (assigned_vars == NULL) {
+        assigned_vars = new_Vector(0);
+    }
+    lhs_vtable->get_vars(lhs, assigned_vars);
+    *type_ptr = NULL;
+    if (rhs_vtable->get_type(rhs, symbols, program_node, type_ptr)) {
+        return 1;
+    }
+    char **vars = NULL;
+    int var_count;
+    safe_method_call(assigned_vars, array, &var_count, &vars);
+    for (int i = 0; i < var_count; i++) {
+        VarType *prev_type;
+        if (!symbols->get(symbols, vars[i], strlen(vars[i]), &prev_type)) {
+            if (typecmp(prev_type, *type_ptr, 0)) {
+                //TODO: Handle type redef
+                fprintf(stderr, "error: type reassignment\n");
+                return 1;
+            }
+        } else {
+            VarType *type_copy;
+            safe_function_call(copy_VarType, *type_ptr, &type_copy);
+            safe_method_call(symbols,
+                             put,
+                             vars[i],
+                             strlen(vars[i]),
+                             type_copy,
+                             NULL);
+        }
+    }
+
     data->type = *type_ptr;
     assigned_vars->clear(assigned_vars, NULL);
     if (*type_ptr == NULL) {
         return 1;
     }
     if (lhs_vtable->assign_type(lhs, *type_ptr, symbols)) {
-        //TODO: Handle type reassignment error
+        //TODO: Handle type redef error
         fprintf(stderr, "error: type reassignment\n");
         err = 1;
     }
@@ -560,7 +624,7 @@ VarType *parse_expression(const ASTNode **nodes,
         case REFERENCE:
             (*expr_ptr)->type = EXPR_VALUE;
             ret_type = node_type;
-            break;
+            return ret_type;
         case HOLD:
             (*expr_ptr)->type = EXPR_VALUE;
             ret_type = node_type->sub_type;
@@ -576,6 +640,9 @@ VarType *parse_expression(const ASTNode **nodes,
                                              program_node,
                                              &func_expr);
         if (new_type == NULL) return NULL;
+        if (new_type->type == REFERENCE) {
+            new_type = new_type->sub_type;
+        }
         if (new_type->type != FUNCTION
             || new_type->function->extension == NULL) {
             //TODO: Handle 2nd argument isn't an extension function
@@ -696,9 +763,6 @@ int GetType_Variable(const void *this,
     const ASTNode   *node = this;
     ASTVariableData *data = node->data;
     size_t len = strlen(data->name);
-    if (assigned_vars != NULL) {
-        safe_method_call(assigned_vars, append, data->name);
-    }
     if (symbols->contains(symbols, data->name, len)) {
         safe_method_call(symbols, get, data->name, len, type_ptr);
         data->type = *type_ptr;
@@ -986,16 +1050,77 @@ int AssignType_TypedVar(const void *this, VarType *type, const Map *symbols) {
     return 0;
 }
 
-int GetVars_Variable(const void *this) {
-    const ASTNode   *node = this;
-    ASTVariableData *data = node->data;
-    safe_method_call(assigned_vars, append, data->name);
+int GetVars_Assignment(const void *this, const Vector *vars) {
+    const ASTNode *node = this;
+    ASTAssignmentData *data = node->data;
+    const ASTNode *lhs = data->lhs;
+    ASTStatementVTable *vtable = lhs->vtable;
+    return vtable->get_vars(lhs, vars);
+}
+
+int GetVars_Def(const void *this, const Vector *vars) {
+    const ASTNode *node = this;
+    ASTDefData *data = node->data;
+    const ASTNode *lhs = data->lhs;
+    ASTStatementVTable *vtable = lhs->vtable;
+    return vtable->get_vars(lhs, vars);
+}
+
+int GetVars_Return    (const void *this, const Vector *vars) {
     return 0;
 }
 
-int GetVars_TypedVar(const void *this) {
-    const ASTNode   *node = this;
+int GetVars_Expression(const void *this, const Vector *vars) {
+    int expr_count;
+    const ASTNode *node = this, **nodes = NULL;
+    ASTExpressionData *data = node->data;
+    safe_method_call(data->exprs, array, &expr_count, &nodes);
+    for (int i = 0; i < expr_count; i++) {
+        const ASTNode *expr_node = nodes[i];
+        ASTStatementVTable *vtable = expr_node->vtable;
+        safe_function_call(vtable->get_vars, expr_node, vars);
+    }
+    return 0;
+}
+
+int GetVars_Ref       (const void *this, const Vector *vars) {
+    return 0;
+}
+
+int GetVars_Paren     (const void *this, const Vector *vars) {
+    return 0;
+}
+
+int GetVars_Hold      (const void *this, const Vector *vars) {
+    return 0;
+}
+
+int GetVars_Variable  (const void *this, const Vector *vars) {
+    const ASTNode *node = this;
+    ASTVariableData *data = node->data;
+    safe_method_call(vars, append, strdup(data->name));
+    return 0;
+}
+
+int GetVars_TypedVar  (const void *this, const Vector *vars) {
+    const ASTNode *node = this;
     ASTTypedVarData *data = node->data;
-    safe_method_call(assigned_vars, append, data->name);
+    safe_method_call(vars, append, strdup(data->name));
+    return 0;
+}
+
+int GetVars_Int       (const void *this, const Vector *vars) {
+    return 0;
+}
+
+int GetVars_Double    (const void *this, const Vector *vars) {
+    return 0;
+}
+
+int GetVars_Function  (const void *this, const Vector *vars) {
+    return 0;
+}
+
+int GetVars_Class     (const void *this, const Vector *vars) {
     return 0;
 }

@@ -56,7 +56,7 @@
 }
 
 %token             T_INDENT T_OUTDENT T_ERROR T_NEWLINE T_FUNC T_RETURN T_REF
-                   T_ARROW T_CLASS T_HOLD
+                   T_ARROW T_CLASS T_DEFINE
 %token<int_val>    T_INT
 %token<double_val> T_DOUBLE
 %token<str_val>    T_IDENT
@@ -137,9 +137,14 @@ expression:
         {
             $$ = new_ClassNode(&@$, $2, $3);
         }
-  | l_value '=' expression
+  | l_value T_DEFINE expression
         {
-            $$ = new_AssignmentNode(&@$, $1, $3);
+            $$ = new_DefNode(&@$, $1, $3);
+        }
+  | call_list '=' expression
+        {
+            const ASTNode *lhs = new_ExpressionNode(&@$, $1);
+            $$ = new_AssignmentNode(&@$, lhs, $3);
         }
 
 opt_stmts:
@@ -171,13 +176,15 @@ sub_expr:
         }
   | '(' call_list ')'
         {
-            $$ = new_ParenNode(&@$, new_ExpressionNode(&@$, $2));
+            $$ = new_ParenNode(&@$, new_ExpressionNode(&@2, $2));
         }
   | T_REF sub_expr
         {
-            $$ = new_RefNode(&@$, $2);
+            const Vector *v = new_Vector(0);
+            safe_method_call(v, append, $2);
+            $$ = new_RefNode(&@$, new_ExpressionNode(&@2, v));
         }
-  | '[' sub_expr ']'
+  | '[' l_value ']'
         {
             $$ = new_HoldNode(&@$, $2);
         }

@@ -181,7 +181,85 @@ const ASTNode *new_AssignmentNode(struct YYLTYPE *loc, const void *lhs,
     vtable->free     = free_assignment;
     vtable->json     = json_assignment;
     vtable->get_type = GetType_Assignment;
+    vtable->get_vars = GetVars_Assignment;
     vtable->codegen  = CodeGen_Assignment;
+    return node;
+}
+
+static void free_def(const void *this) {
+    if (this == NULL) return;
+    const ASTNode *node = this;
+    ASTDefData *data = node->data;
+    free_ASTNode((void*)data->lhs);
+    free_ASTNode((void*)data->rhs);
+    free(data->loc);
+    free(node->data);
+    free(node->vtable);
+    free((void*)node);
+}
+
+static void json_def(const void *this, int indent, FILE *out) {
+    fprintf(out, "{\n");
+    indent++;
+    fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
+    fprintf(out, "\"type\": \"Def\",\n");
+    fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
+    const ASTNode *node = this;
+    ASTDefData *data = node->data;
+    fprintf(out, "\"loc\": \"%d:%d-%d:%d\",\n", data->loc->first_line,
+            data->loc->first_column, data->loc->last_line,
+            data->loc->last_column);
+    fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
+    fprintf(out, "\"lhs\": ");
+    node = data->lhs;
+    ASTNodeVTable *vtable = node->vtable;
+    vtable->json(node, indent, out);
+    fprintf(out, ",\n");
+    fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
+    fprintf(out, "\"rhs\": ");
+    node = data->rhs;
+    vtable = node->vtable;
+    vtable->json(node, indent, out);
+    fprintf(out, "\n");
+    indent--;
+    fprintf(out, "%*s}", indent * JSON_TAB_WIDTH, "");
+}
+
+const ASTNode *new_DefNode(struct YYLTYPE *loc, const void *lhs,
+                           const void *rhs) {
+    ASTNode *node = malloc(sizeof(*node));
+    if (node == NULL) {
+        return NULL;
+    }
+    struct ast_def_data *data = malloc(sizeof(*data));
+    if (data == NULL) {
+        free(node);
+        return NULL;
+    }
+    node->data = data;
+    struct ast_def_vtable *vtable = malloc(sizeof(*vtable));
+    if (vtable == NULL) {
+        free(data);
+        free(node);
+        return NULL;
+    }
+    node->vtable = vtable;
+    data->loc = malloc(sizeof(*loc));
+    if (data->loc == NULL) {
+        free(vtable);
+        free(data);
+        free(node);
+        return NULL;
+    }
+    memcpy(data->loc, loc, sizeof(*loc));
+    data->lhs = lhs;
+    data->rhs = rhs;
+    data->type = NULL;
+    vtable->free     = free_def;
+    vtable->json     = json_def;
+    vtable->get_type = GetType_Def;
+    vtable->get_vars = GetVars_Def;
+    vtable->codegen  = CodeGen_Def;
     return node;
 }
 
@@ -254,6 +332,7 @@ const ASTNode *new_ReturnNode(struct YYLTYPE *loc, const void *value) {
     vtable->free     = free_return;
     vtable->json     = json_return;
     vtable->get_type = GetType_Return;
+    vtable->get_vars = GetVars_Return;
     vtable->codegen  = CodeGen_Return;
     return node;
 }
@@ -321,6 +400,7 @@ const ASTNode *new_ExpressionNode(struct YYLTYPE *loc, const Vector *exprs) {
     vtable->free     = free_expression;
     vtable->json     = json_expression;
     vtable->get_type = GetType_Expression;
+    vtable->get_vars = GetVars_Expression;
     vtable->codegen  = CodeGen_Expression;
     return node;
 }
@@ -384,6 +464,7 @@ const ASTNode *new_RefNode(struct YYLTYPE *loc, const ASTNode *expr) {
     vtable->free     = free_ref;
     vtable->json     = json_ref;
     vtable->get_type = GetType_Ref;
+    vtable->get_vars = GetVars_Ref;
     vtable->codegen  = CodeGen_Ref;
     return node;
 }
@@ -450,6 +531,7 @@ const ASTNode *new_ParenNode(struct YYLTYPE *loc, const ASTNode *val) {
     vtable->free     = free_paren;
     vtable->json     = json_paren;
     vtable->get_type = GetType_Paren;
+    vtable->get_vars = GetVars_Paren;
     vtable->codegen  = CodeGen_Paren;
     return node;
 }
@@ -516,6 +598,7 @@ const ASTNode *new_HoldNode(struct YYLTYPE *loc, const ASTNode *val) {
     vtable->free     = free_hold;
     vtable->json     = json_hold;
     vtable->get_type = GetType_Hold;
+    vtable->get_vars = GetVars_Hold;
     vtable->codegen  = CodeGen_Hold;
     return node;
 }
@@ -600,6 +683,7 @@ const ASTNode *new_FunctionNode(struct YYLTYPE *loc,
     vtable->free =     free_function;
     vtable->json =     json_function;
     vtable->get_type = GetType_Function;
+    vtable->get_vars = GetVars_Function;
     vtable->codegen  = CodeGen_Function;
     return node;
 }
@@ -678,6 +762,7 @@ const ASTNode *new_ClassNode(struct YYLTYPE *loc,
     vtable->free     = free_class;
     vtable->json     = json_class;
     vtable->get_type = GetType_Class;
+    vtable->get_vars = GetVars_Class;
     vtable->codegen  = CodeGen_Class;
     return node;
 }
@@ -742,8 +827,8 @@ const ASTNode *new_VariableNode(struct YYLTYPE *loc, char *name) {
     vtable->free        = free_variable;
     vtable->json        = json_variable;
     vtable->get_type    = GetType_Variable;
-    vtable->assign_type = AssignType_Variable;
     vtable->get_vars    = GetVars_Variable;
+    vtable->assign_type = AssignType_Variable;
     vtable->codegen     = CodeGen_Variable;
     return node;
 }
@@ -815,8 +900,8 @@ const ASTNode *new_TypedVarNode(struct YYLTYPE *loc,
     vtable->free        = free_typed_var;
     vtable->json        = json_typed_var;
     vtable->get_type    = GetType_TypedVar;
-    vtable->assign_type = AssignType_TypedVar;
     vtable->get_vars    = GetVars_TypedVar;
+    vtable->assign_type = AssignType_TypedVar;
     vtable->codegen     = CodeGen_TypedVar;
     return node;
 }
@@ -881,6 +966,7 @@ const ASTNode *new_IntNode(struct YYLTYPE *loc, int val) {
     vtable->free        = free_int;
     vtable->json        = json_int;
     vtable->get_type    = GetType_Int;
+    vtable->get_vars    = GetVars_Int;
     vtable->codegen     = CodeGen_Int;
     return node;
 }
@@ -942,10 +1028,11 @@ const ASTNode *new_DoubleNode(struct YYLTYPE *loc, double val) {
     memcpy(data->loc, loc, sizeof(*loc));
     data->val = val;
     safe_function_call(new_VarType, "double", &data->type);
-    vtable->free        = free_double;
-    vtable->json        = json_double;
-    vtable->get_type    = GetType_Double;
-    vtable->codegen     = CodeGen_Double;
+    vtable->free     = free_double;
+    vtable->json     = json_double;
+    vtable->get_type = GetType_Double;
+    vtable->get_vars = GetVars_Double;
+    vtable->codegen  = CodeGen_Double;
     return node;
 }
 
