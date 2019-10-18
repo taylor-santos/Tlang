@@ -56,7 +56,7 @@
 }
 
 %token             T_INDENT T_OUTDENT T_ERROR T_NEWLINE T_FUNC T_RETURN T_REF
-                   T_ARROW T_CLASS
+                   T_ARROW T_CLASS T_HOLD
 %token<int_val>    T_INT
 %token<double_val> T_DOUBLE
 %token<str_val>    T_IDENT
@@ -176,6 +176,10 @@ sub_expr:
   | T_REF sub_expr
         {
             $$ = new_RefNode(&@$, $2);
+        }
+  | '[' sub_expr ']'
+        {
+            $$ = new_HoldNode(&@$, $2);
         }
   | '(' func_block ')'
         {

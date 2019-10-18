@@ -46,25 +46,23 @@ static void define_closures(FILE *out) {
     fprintf(out, "printf(\" }\\n\");\n");
     fprintf(out, "}\n");
     fprintf(out, "\n");
-    fprintf(out, "#define call(c, ...) ((void*(*)())((closure*)c)->fn)"
-                 "(((closure*)c)->env, ##__VA_ARGS__)\n");
+    fprintf(out, "#define call(c, ...) ((void*(*)(closure*, ...))"
+                 "((closure*)c)->fn)(c, ##__VA_ARGS__)\n");
     fprintf(out, "#define build_closure(c_ptr, func, ...) { \\\n");
     print_indent(1, out);
-    fprintf(out, "closure *c = malloc(sizeof(closure)); \\\n");
+    fprintf(out, "*c_ptr = malloc(sizeof(closure)); \\\n");
     print_indent(1, out);
-    fprintf(out, "c->fn = func; \\\n");
+    fprintf(out, "((closure*)*c_ptr)->fn = func; \\\n");
     print_indent(1, out);
     fprintf(out, "void **env[] = {__VA_ARGS__}; \\\n");
     print_indent(1, out);
-    fprintf(out, "c->env = malloc(sizeof(env) + sizeof(void**)); \\\n");
+    fprintf(out, "((closure*)*c_ptr)->env = malloc(sizeof(env)); \\\n");
     print_indent(1, out);
-    fprintf(out, "memcpy(c->env, env, sizeof(env)); \\\n");
+    fprintf(out, "memcpy(((closure*)*c_ptr)->env, env, sizeof(env)); "
+                 "\\\n");
     print_indent(1, out);
-    fprintf(out, "c->env_size = sizeof(env) / sizeof(void**); \\\n");
-    print_indent(1, out);
-    fprintf(out, "*c_ptr = c; \\\n");
-    print_indent(1, out);
-    fprintf(out, "c->env[c->env_size++] = c_ptr; \\\n");
+    fprintf(out, "((closure*)*c_ptr)->env_size = sizeof(env) / "
+                 "sizeof(void**); \\\n");
     fprintf(out, "}\n\n");
 }
 
@@ -83,13 +81,13 @@ static void define_builtins(FILE *out) {
     fprintf(out, "return ret;\n");
     fprintf(out, "}\n");
     fprintf(out, "\n");
-    fprintf(out, "void builtin_println(void **env, void *val) {\n");
+    fprintf(out, "void builtin_println(closure *c, void *val) {\n");
     print_indent(1, out);
     fprintf(out, "printf(\"%%d\\n\", ((class_Int*)val)->value);\n");
     fprintf(out, "}\n");
     fprintf(out, "\n");
     fprintf(out,
-            "void *builtin_0x%X(void **env, void *a, void *b) {\n", '+');
+            "void *builtin_0x%X(closure *c, void *a, void *b) {\n", '+');
     print_indent(1, out);
     fprintf(out,
             "return new_Int(((class_Int*)a)->value + "
@@ -114,7 +112,7 @@ static int define_functions(CodegenState *state, FILE *out) {
         }
         int *index = NULL;
         safe_method_call(state->func_defs, get, node, sizeof(node), &index);
-        fprintf(out, "func%d(void***", *index);
+        fprintf(out, "func%d(closure*", *index);
         if (data->signature->extension != NULL) {
             char *ref = data->signature->extension->type->type == REFERENCE
                         ? "*"
@@ -144,7 +142,7 @@ static int define_functions(CodegenState *state, FILE *out) {
         }
         int *index = NULL;
         safe_method_call(state->func_defs, get, node, sizeof(node), &index);
-        fprintf(out, "func%d(void ***env", *index);
+        fprintf(out, "func%d(closure *c", *index);
         if (data->signature->extension != NULL) {
             char *ref = data->signature->extension->type->type == REFERENCE
                         ? "*"
@@ -235,7 +233,7 @@ static int define_functions(CodegenState *state, FILE *out) {
         for (int j = 0; j < env_count; j++) {
             print_indent(1, out);
             fprintf(out,
-                    "#define %.*s *env[%d]\n",
+                    "#define %.*s *c->env[%d]\n",
                     (int) env_lengths[j],
                     env[j],
                     j);
@@ -251,10 +249,9 @@ static int define_functions(CodegenState *state, FILE *out) {
         for (int j = 0; j < assigned_count; j++) {
             print_indent(1, out);
             fprintf(out,
-                    "#define %.*s *env[%d]\n",
+                    "#define %.*s c\n",
                     (int) assigned_lengths[j],
-                    assigned[j],
-                    env_end_index);
+                    assigned[j]);
         }
 
         ASTNode **stmts = NULL;
@@ -386,6 +383,9 @@ char *CodeGen_Assignment(const void *this, void *state, FILE *out) {
         append_string(&ret, "*");
     }
     append_string(&ret, "%s = ", lhs_code);
+    if (lhs_type->type != REFERENCE && rhs_type->type == REFERENCE) {
+        append_string(&ret, "*");
+    }
     append_string(&ret, "%s", rhs_code);
     free(lhs_code);
     free(rhs_code);
@@ -400,7 +400,15 @@ char *CodeGen_Return(const void *this, void *state, FILE *out) {
         const ASTNode *ret_node = data->returns;
         ASTStatementVTable *ret_vtable = ret_node->vtable;
         char *code = ret_vtable->codegen(ret_node, state, out);
-        append_string(&ret, " %s", code);
+        ASTStatementData *ret_data = ret_node->data;
+        char *ref = ret_data->type->type == REFERENCE
+                    ? data->type->sub_type->type == REFERENCE
+                    ? ""
+                    : "*"
+                    : data->type->sub_type->type == REFERENCE
+                    ? "&"
+                    : "";
+        append_string(&ret, " %s%s", ref, code);
         free(code);
     }
     return ret;
@@ -421,7 +429,7 @@ char *CodeGen_Expression(const void *this, void *state, FILE *out) {
     char *func_code, *ret, **arg_codes, *ext_code = NULL;
     FuncType *function;
     NamedArg **arg_types = NULL;
-    VarType **passed_types;
+    VarType **passed_types, *ext_type = NULL;
 
     switch(expr->type) {
         case EXPR_FUNC:
@@ -431,6 +439,8 @@ char *CodeGen_Expression(const void *this, void *state, FILE *out) {
             if (expr->extension != NULL) {
                 ext_node = expr->extension;
                 ext_vtable = ext_node->vtable;
+                ext_data = ext_node->data;
+                ext_type = ext_data->type;
                 ext_code = ext_vtable->codegen(ext_node, state, out);
             }
             safe_method_call(expr->args, array, &arg_count, &args);
@@ -453,7 +463,12 @@ char *CodeGen_Expression(const void *this, void *state, FILE *out) {
             fprintf(out, "call(%s", func_code);
             free(func_code);
             if (expr->extension != NULL) {
-                fprintf(out, ", %s", ext_code);
+                fprintf(out, ", ");
+                if (ext_type->type == REFERENCE
+                    && function->extension->type->type != REFERENCE) {
+                    fprintf(out, "*");
+                }
+                fprintf(out, "%s", ext_code);
                 free(ext_code);
             }
             safe_method_call(function->named_args,
@@ -503,6 +518,13 @@ char *CodeGen_Paren(const void *this, void *state, FILE *out) {
     return vtable->codegen(data->val, state, out);
 }
 
+char *CodeGen_Hold(const void *this, void *state, FILE *out) {
+    const ASTNode *node = this;
+    ASTHoldData *data = node->data;
+    ASTHoldVTable *vtable = data->val->vtable;
+    return vtable->codegen(data->val, state, out);
+}
+
 char *CodeGen_Function(const void *this, void *state, FILE *out) {
     CodegenState *cg_state = state;
     const ASTNode *node = this;
@@ -530,7 +552,12 @@ char *CodeGen_Function(const void *this, void *state, FILE *out) {
         char *ref = var_type->type == REFERENCE
                     ? ""
                     : "&";
-        fprintf(out, "%s%s%.*s", sep, ref, (int)lengths[j], symbols[j]);
+        fprintf(out,
+                "%s(void**)%s%.*s",
+                sep,
+                ref,
+                (int)lengths[j],
+                symbols[j]);
         sep = ", ";
         free((void*)symbols[j]);
     }

@@ -12,6 +12,7 @@ char *CodeGen_Return    (const void *this, void *state, FILE *out);
 char *CodeGen_Expression(const void *this, void *state, FILE *out);
 char *CodeGen_Ref       (const void *this, void *state, FILE *out);
 char *CodeGen_Paren     (const void *this, void *state, FILE *out);
+char *CodeGen_Hold      (const void *this, void *state, FILE *out);
 char *CodeGen_Function  (const void *this, void *state, FILE *out);
 char *CodeGen_Class     (const void *this, void *state, FILE *out);
 char *CodeGen_Int       (const void *this, void *state, FILE *out);

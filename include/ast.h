@@ -173,20 +173,21 @@ struct ast_paren_vtable {
 const ASTNode *new_ParenNode(struct YYLTYPE *loc, const ASTNode *val);
 
 
-/* Call Node < Statement Node */
-typedef struct ast_call_data   ASTCallData;
-typedef struct ast_call_vtable ASTCallVTable;
-struct ast_call_data {
+/* Hold Node < Statement Node */
+typedef struct ast_hold_data   ASTHoldData;
+typedef struct ast_hold_vtable ASTHoldVTable;
+struct ast_hold_data {
     struct YYLTYPE *loc;
     VarType        *type;
+    const ASTNode  *val;
 };
-struct ast_call_vtable {
+struct ast_hold_vtable {
     void (*free)      (const void*);
     void (*json)      (const void*, int, FILE*);
     char*(*codegen) (const void*, void*, FILE*);
     int  (*get_type)(const void*, const Map*, const void*, VarType**);
 };
-const ASTNode *new_CallNode(struct YYLTYPE *loc);
+const ASTNode *new_HoldNode(struct YYLTYPE *loc, const ASTNode *val);
 
 
 /* LExpr Node < RExpr Node */
