@@ -538,6 +538,7 @@ char *CodeGen_Ref(const void *this, void *state, FILE *out) {
     asprintf(&ret, "tmp%d", cg_state->tmp_count++);
     print_indent(cg_state->indent, out);
     fprintf(out, "void **%s = &%s;\n", ret, code);
+    free(code);
     return ret;
 }
 

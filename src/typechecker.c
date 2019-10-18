@@ -86,6 +86,11 @@ void free_VarType(void *this) {
         case FUNCTION:
             free_FuncType(type->function);
             break;
+        case REFERENCE:
+        case RETURN:
+        case HOLD:
+            free_VarType(type->sub_type);
+            break;
         default:
             break;
     }
@@ -177,7 +182,7 @@ int new_ClassType(VarType **vartype_ptr) {
     return 0;
 }
 
-int new_ReturnType(VarType *ret_type, VarType **vartype_ptr) {
+int new_ReturnType(VarType **vartype_ptr, VarType *sub_type) {
     if (vartype_ptr == NULL) {
         return 1;
     }
@@ -186,7 +191,7 @@ int new_ReturnType(VarType *ret_type, VarType **vartype_ptr) {
         return 1;
     }
     (*vartype_ptr)->type = RETURN;
-    (*vartype_ptr)->sub_type = ret_type;
+    (*vartype_ptr)->sub_type = sub_type;
     return 0;
 }
 
@@ -276,6 +281,10 @@ void print_VarType(const void *this) {
             printf("ref ");
             print_VarType(type->sub_type);
             break;
+        case HOLD:
+            printf("hold ");
+            print_VarType(type->sub_type);
+            break;
         case CLASS:
             printf("class");
             break;
@@ -307,23 +316,11 @@ static int copy_VarType(const void *type, const void *copy_ptr) {
                                &(*VT_copy_ptr)->function);
             break;
         case RETURN:
-            safe_function_call(copy_VarType,
-                               VT_type->sub_type,
-                               &(*VT_copy_ptr)->sub_type);
-            break;
-        case NONE:
-            break;
         case REFERENCE:
-            safe_function_call(copy_VarType,
-                               VT_type->sub_type,
-                               &(*VT_copy_ptr)->sub_type);
-            break;
         case HOLD:
             safe_function_call(copy_VarType,
                                VT_type->sub_type,
                                &(*VT_copy_ptr)->sub_type);
-            break;
-        case CLASS:
             break;
     }
     return 0;
@@ -479,7 +476,6 @@ int GetType_Def(const void *this,
     if (type_ptr == NULL) {
         return 1;
     }
-    int err = 0;
     const ASTNode *node = this;
     ASTDefData *data = node->data;
     const ASTNode *lhs = data->lhs;
@@ -516,18 +512,18 @@ int GetType_Def(const void *this,
                              NULL);
         }
     }
-
+    free(vars);
     data->type = *type_ptr;
-    assigned_vars->clear(assigned_vars, NULL);
+    assigned_vars->clear(assigned_vars, free);
     if (*type_ptr == NULL) {
         return 1;
     }
     if (lhs_vtable->assign_type(lhs, *type_ptr, symbols)) {
         //TODO: Handle type redef error
         fprintf(stderr, "error: type reassignment\n");
-        err = 1;
+        return 1;
     }
-    return err;
+    return 0;
 }
 
 int GetType_Return(UNUSED const void *this,
@@ -550,7 +546,9 @@ int GetType_Return(UNUSED const void *this,
                     "error: failed to infer type of returned value\n");
             return 1;
         } else {
-            safe_function_call(new_ReturnType, ret_type, &(data->type));
+            VarType *type_copy = NULL;
+            safe_function_call(copy_VarType, ret_type, &type_copy);
+            safe_function_call(new_ReturnType, &(data->type), type_copy);
             *type_ptr = data->type;
             return 0;
         }
@@ -710,7 +708,9 @@ int GetType_Ref(const void *this,
         fprintf(stderr, "error: reference to reference not allowed\n");
         return 1;
     }
-    safe_function_call(new_RefType, &data->type, ref_type);
+    VarType *type_copy = NULL;
+    safe_function_call(copy_VarType, ref_type, &type_copy);
+    safe_function_call(new_RefType, &data->type, type_copy);
     *type_ptr = data->type;
     return 0;
 }
@@ -748,7 +748,9 @@ int GetType_Hold(const void *this,
     if (vtable->get_type(data->val, symbols, program_node, &type)) {
         return 1;
     }
-    safe_function_call(new_HoldType, type_ptr, type);
+    VarType *type_copy = NULL;
+    safe_function_call(copy_VarType, type, &type_copy);
+    safe_function_call(new_HoldType, type_ptr, type_copy);
     data->type = *type_ptr;
     return 0;
 }
@@ -839,10 +841,9 @@ int GetType_Function(const void *this,
     }
     const ASTNode *node = this;
     ASTFunctionData *data = node->data;
-    data->symbols->free(data->symbols, free_VarType);
     safe_method_call(symbols, copy, &data->symbols, copy_VarType);
-    data->env->free(data->env, free_VarType);
     safe_method_call(data->symbols, copy, &data->env, copy_VarType);
+    data->self = new_Map(0, 0);
     for (int i = 0; i < assigned_vars->size(assigned_vars); i++) {
         char *var = NULL;
         safe_method_call(assigned_vars, get, i, &var);
@@ -880,6 +881,7 @@ int GetType_Function(const void *this,
     NamedArg **args = NULL;
     int num_args;
     safe_method_call(signature->named_args, array, &num_args, &args);
+    data->args = new_Map(0, 0);
     for (int i = 0; i < num_args; i++) {
         VarType *type_copy = NULL;
         safe_function_call(copy_VarType, args[i]->type, &type_copy);
@@ -903,7 +905,7 @@ int GetType_Function(const void *this,
         safe_method_call(data->args, put, name, len, NULL, NULL);
     }
     free(args);
-    assigned_vars->clear(assigned_vars, NULL);
+    assigned_vars->clear(assigned_vars, free);
     VarType *ret_type = signature->ret_type;
     int size = 0;
     ASTNode **stmt_arr = NULL;

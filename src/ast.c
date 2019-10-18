@@ -541,6 +541,7 @@ static void free_hold(const void *this) {
     const ASTNode *node = this;
     ASTHoldData *data = node->data;
     free_ASTNode((void*)data->val);
+    free_VarType(data->type);
     free(data->loc);
     free(node->data);
     free(node->vtable);
@@ -675,10 +676,10 @@ const ASTNode *new_FunctionNode(struct YYLTYPE *loc,
     memcpy(data->loc, loc, sizeof(*loc));
     data->signature = signature;
     data->stmts = stmts;
-    data->symbols = new_Map(0, 0);
-    data->env = new_Map(0, 0);
-    data->args = new_Map(0, 0);
-    data->self = new_Map(0, 0);
+    data->symbols = NULL;
+    data->env     = NULL;
+    data->args    = NULL;
+    data->self    = NULL;
     safe_function_call(new_VarType_from_FuncType, signature, &data->type);
     vtable->free =     free_function;
     vtable->json =     json_function;

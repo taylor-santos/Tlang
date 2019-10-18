@@ -37,7 +37,7 @@ void free_FuncType(void*);
 void free_NamedArg(void*);
 
 int new_VarType(const char *type, VarType **vartype_ptr);
-int new_ReturnType(VarType *ret_type, VarType **vartype_ptr);
+int new_ReturnType(VarType **vartype_ptr, VarType *sub_type);
 int new_NoneType (VarType **vartype_ptr);
 int new_RefType  (VarType **vartype_ptr, VarType *sub_type);
 int new_HoldType (VarType **vartype_ptr, VarType *ref_type);
