@@ -206,7 +206,8 @@ type_def:
         }
   | T_REF type
         {
-            safe_function_call(new_RefType, &$$, $2);
+            $2->is_ref = 1;
+            $$ = $2;
         }
 
 type:

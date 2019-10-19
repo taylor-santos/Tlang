@@ -119,11 +119,13 @@ int new_VarType(const char *type, VarType **vartype_ptr) {
         *vartype_ptr = malloc(sizeof(**vartype_ptr));
         (*vartype_ptr)->type = BUILTIN;
         (*vartype_ptr)->builtin = INT;
+        (*vartype_ptr)->is_ref = 0;
         return 0;
     } else if (strcmp(type, "double") == 0) {
         *vartype_ptr = malloc(sizeof(**vartype_ptr));
         (*vartype_ptr)->type = BUILTIN;
         (*vartype_ptr)->builtin = DOUBLE;
+        (*vartype_ptr)->is_ref = 0;
         return 0;
     } else {
         //TODO: Create VarTypes from classes
@@ -141,6 +143,7 @@ int new_NoneType(VarType **vartype_ptr) {
         return 1;
     }
     (*vartype_ptr)->type = NONE;
+    (*vartype_ptr)->is_ref = 0;
     return 0;
 }
 
@@ -154,6 +157,8 @@ int new_RefType(VarType **vartype_ptr, VarType *sub_type) {
     }
     (*vartype_ptr)->type = REFERENCE;
     (*vartype_ptr)->sub_type = sub_type;
+    (*vartype_ptr)->is_ref = 0;
+    sub_type->is_ref = 1;
     return 0;
 }
 
@@ -167,6 +172,7 @@ int new_HoldType(VarType **vartype_ptr, VarType *sub_type) {
     }
     (*vartype_ptr)->type = HOLD;
     (*vartype_ptr)->sub_type = sub_type;
+    (*vartype_ptr)->is_ref = 0;
     return 0;
 }
 
@@ -179,6 +185,7 @@ int new_ClassType(VarType **vartype_ptr) {
         return 1;
     }
     (*vartype_ptr)->type = CLASS;
+    (*vartype_ptr)->is_ref = 0;
     return 0;
 }
 
@@ -192,6 +199,7 @@ int new_ReturnType(VarType **vartype_ptr, VarType *sub_type) {
     }
     (*vartype_ptr)->type = RETURN;
     (*vartype_ptr)->sub_type = sub_type;
+    (*vartype_ptr)->is_ref = 0;
     return 0;
 }
 
@@ -205,6 +213,7 @@ int new_VarType_from_FuncType(FuncType *type, VarType **vartype_ptr) {
     }
     (*vartype_ptr)->type = FUNCTION;
     (*vartype_ptr)->function = type;
+    (*vartype_ptr)->is_ref = 0;
     return 0;
 }
 
@@ -306,6 +315,7 @@ static int copy_VarType(const void *type, const void *copy_ptr) {
         return 1;
     }
     (*VT_copy_ptr)->type = VT_type->type;
+    (*VT_copy_ptr)->is_ref = VT_type->is_ref;
     switch(VT_type->type) {
         case BUILTIN:
             (*VT_copy_ptr)->builtin = VT_type->builtin;
@@ -367,12 +377,17 @@ static int copy_FuncType(FuncType *type, FuncType **copy_ptr) {
 
 static int typecmp(const VarType *type1, const VarType *type2, int narrow_ref) {
     //Returns 1 if the types differ, 0 if they match
+    if (type1->type == REFERENCE && type2->is_ref == 1) {
+        type1 = type1->sub_type;
+    }
+    /*
     if (!narrow_ref && type1->type != REFERENCE && type2->type == REFERENCE) {
         type2 = type2->sub_type;
     }
     if (type1->type == REFERENCE && type2->type != REFERENCE) {
         type1 = type1->sub_type;
     }
+     */
     if (type1->type != type2->type) {
         return 1;
     }
@@ -601,7 +616,9 @@ VarType *parse_expression(const ASTNode **nodes,
                     return NULL;
                 }
                 safe_method_call(function->named_args, get, i, &expected_type);
-                if (typecmp(arg_type, expected_type->type, 0)) {
+                if (typecmp(arg_type, expected_type->type, 0) ||
+                    (expected_type->type->is_ref
+                    && arg_type->type != REFERENCE)) {
                     //TODO: Handle incompatible argument type
                     fprintf(stderr,
                             "error: incompatible argument type\n");
@@ -861,9 +878,15 @@ int GetType_Function(const void *this,
     }
     if (data->signature->extension != NULL) {
         VarType *type_copy = NULL;
-        safe_function_call(copy_VarType,
-            data->signature->extension->type,
-            &type_copy);
+        if (data->signature->extension->type->type == REFERENCE) {
+            safe_function_call(copy_VarType,
+                               data->signature->extension->type->sub_type,
+                               &type_copy);
+        } else {
+            safe_function_call(copy_VarType,
+                               data->signature->extension->type,
+                               &type_copy);
+        }
         VarType *prev_type = NULL;
         safe_method_call(data->symbols,
             put,
@@ -884,7 +907,14 @@ int GetType_Function(const void *this,
     data->args = new_Map(0, 0);
     for (int i = 0; i < num_args; i++) {
         VarType *type_copy = NULL;
-        safe_function_call(copy_VarType, args[i]->type, &type_copy);
+        if (args[i]->type->type == REFERENCE) {
+            safe_function_call(copy_VarType,
+                               args[i]->type->sub_type,
+                               &type_copy);
+        } else {
+            safe_function_call(copy_VarType, args[i]->type, &type_copy);
+        }
+
         size_t arg_len = strlen(args[i]->name);
         VarType *prev_type = NULL;
         safe_method_call(data->symbols,
@@ -907,18 +937,18 @@ int GetType_Function(const void *this,
     free(args);
     assigned_vars->clear(assigned_vars, free);
     VarType *ret_type = signature->ret_type;
-    int size = 0;
+    int stmt_count = 0;
     ASTNode **stmt_arr = NULL;
-    safe_method_call(data->stmts, array, &size, &stmt_arr);
+    safe_method_call(data->stmts, array, &stmt_count, &stmt_arr);
     int err = 0;
-    for (int i = 0; i < size; i++) {
+    for (int i = 0; i < stmt_count; i++) {
         ASTStatementVTable *vtable = stmt_arr[i]->vtable;
         VarType *type = NULL;
         err = vtable->get_type(stmt_arr[i], data->symbols, program_node, &type)
               || err;
         if (type && type->type == RETURN) {
             // Compare stated function return type to type of return statement
-            if (typecmp(ret_type, type->sub_type, 1)) {
+            if (typecmp(type->sub_type, ret_type, 1)) {
                 //TODO: Handle incompatible return statement
                 fprintf(stderr, "error: incompatible return type\n");
                 err = 1;

@@ -114,19 +114,17 @@ static int define_functions(CodegenState *state, FILE *out) {
         safe_method_call(state->func_defs, get, node, sizeof(node), &index);
         fprintf(out, "func%d(closure*", *index);
         if (data->signature->extension != NULL) {
-            char *ref = data->signature->extension->type->type == REFERENCE
-                        ? "*"
-                        : "";
-            fprintf(out, ", void*%s", ref);
+            fprintf(out, ", void*");
+            if (data->signature->extension->type->is_ref) {
+                fprintf(out, "*");
+            }
         }
         int arg_count;
         NamedArg **args = NULL;
         safe_method_call(data->signature->named_args, array, &arg_count, &args);
         for (int j = 0; j < arg_count; j++) {
-            char *ref = args[j]->type->type == REFERENCE
-                        ? "*"
-                        : "";
-            fprintf(out, ", void*%s", ref);
+            fprintf(out, ", void*");
+            if (args[j]->type->is_ref) fprintf(out, "*");
         }
         free(args);
         fprintf(out, ");\n");
@@ -144,22 +142,19 @@ static int define_functions(CodegenState *state, FILE *out) {
         safe_method_call(state->func_defs, get, node, sizeof(node), &index);
         fprintf(out, "func%d(closure *c", *index);
         if (data->signature->extension != NULL) {
-            char *ref = data->signature->extension->type->type == REFERENCE
-                        ? "*"
-                        : "";
-            fprintf(out,
-                    ", void *%s%s",
-                    ref,
-                    data->signature->extension->name);
+            fprintf(out, ", void *");
+            if (data->signature->extension->type->is_ref) {
+                fprintf(out, "*");
+            }
+            fprintf(out, "%s", data->signature->extension->name);
         }
         int arg_count;
         NamedArg **args = NULL;
         safe_method_call(data->signature->named_args, array, &arg_count, &args);
         for (int j = 0; j < arg_count; j++) {
-            char *ref = args[j]->type->type == REFERENCE
-                        ? "*"
-                        : "";
-            fprintf(out, ", void *%s%s", ref, args[j]->name);
+            fprintf(out, ", void *");
+            if (args[j]->type->is_ref) fprintf(out, "*");
+            fprintf(out, "%s", args[j]->name);
         }
         free(args);
         fprintf(out, ") {\n");
@@ -203,15 +198,11 @@ static int define_functions(CodegenState *state, FILE *out) {
                                  symbols[j],
                                  lengths[j],
                                  &type);
-                char *ref = type->type == REFERENCE
-                            ? "*"
-                            : "";
                 if (no_vars) print_indent(state->indent, out);
                 no_vars = 0;
                 fprintf(out,
-                        "%s%s%.*s",
+                        "%s%.*s",
                         sep,
-                        ref,
                         (int)lengths[j],
                         symbols[j]);
                 sep = ", *";
@@ -311,10 +302,7 @@ int define_main(ASTProgramData *data, CodegenState *state, FILE *out) {
     for (int i = 0; i < symbol_count; i++) {
         VarType *type = NULL;
         safe_method_call(data->symbols, get, symbols[i], lengths[i], &type);
-        char *ref = type->type == REFERENCE
-                    ? "*"
-                    : "";
-        fprintf(out, "%s%s%.*s", sep, ref, (int)lengths[i], symbols[i]);
+        fprintf(out, "%s%.*s", sep, (int)lengths[i], symbols[i]);
         sep = ", *";
         free((char*)symbols[i]);
     }
@@ -381,15 +369,10 @@ char *CodeGen_Assignment(const void *this, void *state, FILE *out) {
     ASTStatementData *rhs_data = rhs->data;
     VarType *rhs_type = rhs_data->type;
     char *rhs_code = vtable->codegen(rhs, state, out);
+    char *lhs_ref = lhs_type->is_ref ? "*" : "";
+    char *rhs_ref = rhs_type->is_ref ? "*" : "";
     char *ret = NULL;
-    if (lhs_type->type == REFERENCE && rhs_type->type != REFERENCE) {
-        append_string(&ret, "*");
-    }
-    append_string(&ret, "%s = ", lhs_code);
-    if (lhs_type->type != REFERENCE && rhs_type->type == REFERENCE) {
-        append_string(&ret, "*");
-    }
-    append_string(&ret, "%s", rhs_code);
+    safe_asprintf(&ret, "%s%s = %s%s", lhs_ref, lhs_code, rhs_ref, rhs_code);
     free(lhs_code);
     free(rhs_code);
     return ret;
@@ -409,13 +392,7 @@ char *CodeGen_Def(const void *this, void *state, FILE *out) {
     VarType *rhs_type = rhs_data->type;
     char *rhs_code = vtable->codegen(rhs, state, out);
     char *ret = NULL;
-    if (lhs_type->type == REFERENCE && rhs_type->type != REFERENCE) {
-        append_string(&ret, "*");
-    }
     append_string(&ret, "%s = ", lhs_code);
-    if (lhs_type->type != REFERENCE && rhs_type->type == REFERENCE) {
-        append_string(&ret, "*");
-    }
     append_string(&ret, "%s", rhs_code);
     free(lhs_code);
     free(rhs_code);
@@ -431,14 +408,7 @@ char *CodeGen_Return(const void *this, void *state, FILE *out) {
         ASTStatementVTable *ret_vtable = ret_node->vtable;
         char *code = ret_vtable->codegen(ret_node, state, out);
         ASTStatementData *ret_data = ret_node->data;
-        char *ref = ret_data->type->type == REFERENCE
-                    ? data->type->sub_type->type == REFERENCE
-                    ? ""
-                    : "*"
-                    : data->type->sub_type->type == REFERENCE
-                    ? "&"
-                    : "";
-        append_string(&ret, " %s%s", ref, code);
+        append_string(&ret, " %s", code);
         free(code);
     }
     return ret;
@@ -486,18 +456,23 @@ char *CodeGen_Expression(const void *this, void *state, FILE *out) {
             ret = NULL;
             safe_asprintf(&ret, "tmp%d", cg_state->tmp_count++);
             print_indent(cg_state->indent, out);
-            char *ref = function->ret_type->type == REFERENCE
-                        ? "*"
-                        : "";
-            fprintf(out, "void *%s%s = ", ref, ret);
+            fprintf(out, "void ");
+            if (function->ret_type->is_ref) fprintf(out, "*");
+            fprintf(out, "*%s = ", ret);
             fprintf(out, "call(%s", func_code);
             free(func_code);
             if (expr->extension != NULL) {
                 fprintf(out, ", ");
-                if (ext_type->type == REFERENCE
-                    && function->extension->type->type != REFERENCE) {
+                if ((ext_type->is_ref || ext_type->type == REFERENCE)
+                    && !function->extension->type->is_ref) {
                     fprintf(out, "*");
                 }
+                if (!ext_type->is_ref
+                    && ext_type->type != REFERENCE
+                    && function->extension->type->is_ref) {
+                    fprintf(out, "&");
+                }
+
                 fprintf(out, "%s", ext_code);
                 free(ext_code);
             }
@@ -509,9 +484,14 @@ char *CodeGen_Expression(const void *this, void *state, FILE *out) {
                 VarType *arg_type = arg_types[i]->type;
                 VarType *passed_type = passed_types[i];
                 fprintf(out, ", ");
-                if (passed_type->type == REFERENCE
-                    && arg_type->type != REFERENCE) {
+                if ((passed_type->is_ref || passed_type->type == REFERENCE)
+                    && !arg_type->is_ref) {
                     fprintf(out, "*");
+                }
+                if (!passed_type->is_ref
+                    && passed_type->type != REFERENCE
+                    && arg_type->is_ref) {
+                    fprintf(out, "&");
                 }
                 fprintf(out, "%s", arg_codes[i]);
                 free(arg_codes[i]);
@@ -533,8 +513,10 @@ char *CodeGen_Ref(const void *this, void *state, FILE *out) {
     const ASTNode *node = this;
     ASTRefData *data = node->data;
     ASTStatementVTable *ref_vtable = data->expr->vtable;
-    char *ret;
     char *code = ref_vtable->codegen(data->expr, state, out);
+    ASTStatementData *ref_data = data->expr->data;
+    if (ref_data->type->is_ref) return code;
+    char *ret;
     asprintf(&ret, "tmp%d", cg_state->tmp_count++);
     print_indent(cg_state->indent, out);
     fprintf(out, "void **%s = &%s;\n", ret, code);
@@ -580,13 +562,9 @@ char *CodeGen_Function(const void *this, void *state, FILE *out) {
     for (int j = 0; j < symbol_count; j++) {
         VarType *var_type = NULL;
         safe_method_call(data->symbols, get, symbols[j], lengths[j], &var_type);
-        char *ref = var_type->type == REFERENCE
-                    ? "&"
-                    : "";
         fprintf(out,
-                "%s(void*)%s%.*s",
+                "%s(void*)%.*s",
                 sep,
-                ref,
                 (int)lengths[j],
                 symbols[j]);
         sep = ", ";

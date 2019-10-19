@@ -17,6 +17,7 @@ struct var_type {
         FuncType *function;
         VarType *sub_type;
     };
+    int is_ref;
 };
 
 struct named_arg {
