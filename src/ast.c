@@ -44,6 +44,7 @@ static void free_program(const void *this) {
     data->statements->free(data->statements, free_ASTNode);
     data->symbols->free(data->symbols, free_VarType);
     data->func_defs->free(data->func_defs, free);
+    data->class_defs->free(data->class_defs, free);
     free(data->loc);
     free(node->data);
     free(node->vtable);
@@ -102,6 +103,7 @@ const ASTNode *new_ProgramNode(struct YYLTYPE *loc, const Vector *statements) {
     data->symbols      = new_Map(0, 0);
     safe_function_call(add_builtins, data->symbols);
     data->func_defs    = new_Map(0, 0);
+    data->class_defs   = new_Map(0, 0);
     vtable->free       = free_program;
     vtable->json       = json_program;
     vtable->type_check = TypeCheck_Program;
@@ -698,6 +700,7 @@ static void free_class(const void *this) {
     data->stmts->free(data->stmts, free_ASTNode);
     data->symbols->free(data->symbols, free_VarType);
     data->fields->free(data->fields, free_VarType);
+    data->self->free(data->self, NULL);
     free(data->loc);
     free(node->data);
     free(node->vtable);
@@ -759,7 +762,8 @@ const ASTNode *new_ClassNode(struct YYLTYPE *loc,
     data->stmts = stmts;
     data->symbols = new_Map(0, 0);
     data->fields = new_Map(0, 0);
-    safe_function_call(new_ClassType, &data->type);
+    data->self = new_Map(0, 0);
+    data->type = NULL;
     vtable->free     = free_class;
     vtable->json     = json_class;
     vtable->get_type = GetType_Class;
@@ -1098,6 +1102,20 @@ static void json_VarType(const void *this, int indent, FILE *out) {
         case CLASS:
             fprintf(out, "\"class\"\n");
             break;
+        case HOLD:
+            fprintf(out, "\"hold\"\n");
+            fprintf(out, "\"hold_type\": ");
+            json_VarType(type->sub_type, indent, out);
+            fprintf(out, "\n");
+            break;
+        case RETURN:
+            fprintf(out, "\"return\"\n");
+            if (type->sub_type != NULL) {
+                fprintf(out, "\"ret_type\": ");
+                json_VarType(type->sub_type, indent, out);
+                fprintf(out, "\n");
+            }
+            break;
     }
     indent--;
     fprintf(out, "%*s}", indent * JSON_TAB_WIDTH, "");
@@ -1107,7 +1125,7 @@ static void json_NamedArg(const void *this, int indent, FILE *out) {
     fprintf(out, "{\n");
     indent++;
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
-    const NamedArg *arg = this;
+    const NamedType *arg = this;
     if (arg->name != NULL) {
         fprintf(out, "\"name\": ");
         fprintf(out, "\"%s\",\n", arg->name);

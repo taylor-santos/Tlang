@@ -10,7 +10,7 @@
 
 typedef struct expr_node Expression;
 struct expr_node {
-    enum { EXPR_FUNC, EXPR_VALUE } type;
+    enum { EXPR_FUNC, EXPR_VALUE, EXPR_CLASS } type;
     const void   *node;
     const Vector *args;
     const void   *extension;
@@ -42,8 +42,9 @@ typedef struct ast_program_vtable ASTProgramVTable;
 struct ast_program_data {
     struct YYLTYPE *loc;
     const Vector   *statements; // Vector<ASTNode*>
-    const Map      *symbols;
-    const Map      *func_defs; // Vector<ASTNode*>
+    const Map      *symbols;    // Map<char*, VarType*>
+    const Map      *func_defs;  // Vector<ASTNode*>
+    const Map      *class_defs; // Vector<ASTNode*>
 };
 struct ast_program_vtable {
     void (*free)      (const void*);
@@ -271,6 +272,7 @@ struct ast_class_data {
     const Vector   *stmts;
     const Map      *symbols;
     const Map      *fields;
+    const Map      *self;
 };
 struct ast_class_vtable {
     void (*free)    (const void*);

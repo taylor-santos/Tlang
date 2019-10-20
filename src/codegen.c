@@ -5,6 +5,7 @@
 typedef struct {
     int indent;
     const Map *func_defs;
+    const Map *class_defs;
     int tmp_count;
 } CodegenState;
 
@@ -81,6 +82,20 @@ static void define_builtins(FILE *out) {
     fprintf(out, "return ret;\n");
     fprintf(out, "}\n");
     fprintf(out, "\n");
+    fprintf(out, "typedef struct {\n");
+    print_indent(1, out);
+    fprintf(out, "double value;\n");
+    fprintf(out, "} class_Double;\n");
+    fprintf(out, "\n");
+    fprintf(out, "void *new_Double(double val) {\n");
+    print_indent(1, out);
+    fprintf(out, "class_Double *ret = malloc(sizeof(class_Double));\n");
+    print_indent(1, out);
+    fprintf(out, "ret->value = val;\n");
+    print_indent(1, out);
+    fprintf(out, "return ret;\n");
+    fprintf(out, "}\n");
+    fprintf(out, "\n");
     fprintf(out, "void builtin_println(closure *c, void *val) {\n");
     print_indent(1, out);
     fprintf(out, "printf(\"%%d\\n\", ((class_Int*)val)->value);\n");
@@ -96,11 +111,73 @@ static void define_builtins(FILE *out) {
     fprintf(out, "\n");
 }
 
+static int define_classes(CodegenState *state, FILE *out) {
+    ASTNode **nodes = NULL;
+    size_t *ptr_lengths;
+    int count;
+    safe_method_call(state->class_defs, keys, &count, &ptr_lengths, &nodes);
+    fprintf(out, "/* Class Definitions */\n");
+    for (int i = 0; i < count; i++) {
+        ASTNode *node = nodes[i];
+        ASTClassData *data = node->data;
+        data->type->class->classID = i;
+        char **self = NULL;
+        size_t *self_lengths;
+        int self_count;
+        safe_method_call(data->self, keys, &self_count, &self_lengths, &self);
+        if (self_count > 0) {
+            char *sep = "/* ";
+            for (int j = 0; j < self_count; j++) {
+                fprintf(out, "%s%.*s", sep, (int)self_lengths[j], self[j]);
+                sep = ", ";
+                free(self[j]);
+            }
+            free(self);
+            free(self_lengths);
+            fprintf(out, " */\n");
+        } else {
+            fprintf(out, "/* Anonymous Class */\n");
+        }
+        fprintf(out, "typedef struct {\n");
+        state->indent++;
+        NamedType **fields = NULL;
+        int field_count;
+        safe_method_call(data->type->class->fields,
+                         array,
+                         &field_count,
+                         &fields);
+        for (int j = 0; j < field_count; j++) {
+            print_indent(state->indent, out);
+            fprintf(out,"void *");
+            if (fields[j]->type->is_ref) {
+                fprintf(out, "*");
+            }
+            fprintf(out, "%s;\n", fields[j]->name);
+        }
+        free(fields);
+        state->indent--;
+        fprintf(out, "} class%d;\n", i);
+        fprintf(out, "\n");
+        fprintf(out, "void *new_class%d() {\n", i);
+        state->indent++;
+        print_indent(state->indent, out);
+        fprintf(out, "class%d *ret = malloc(sizeof(class%d));\n", i, i);
+        print_indent(state->indent, out);
+        fprintf(out, "return ret;\n");
+        state->indent--;
+        fprintf(out, "}\n");
+        fprintf(out, "\n");
+        free(nodes[i]);
+    }
+    free(nodes);
+    free(ptr_lengths);
+    return 0;
+}
+
 static int define_functions(CodegenState *state, FILE *out) {
     ASTNode **nodes = NULL;
     size_t *ptr_lengths;
     int fn_count;
-
     safe_method_call(state->func_defs, keys, &fn_count, &ptr_lengths, &nodes);
     fprintf(out, "/* Forward declare functions */\n");
     for (int i = 0; i < fn_count; i++) {
@@ -120,7 +197,7 @@ static int define_functions(CodegenState *state, FILE *out) {
             }
         }
         int arg_count;
-        NamedArg **args = NULL;
+        NamedType **args = NULL;
         safe_method_call(data->signature->named_args, array, &arg_count, &args);
         for (int j = 0; j < arg_count; j++) {
             fprintf(out, ", void*");
@@ -134,6 +211,23 @@ static int define_functions(CodegenState *state, FILE *out) {
     for (int i = 0; i < fn_count; i++) {
         ASTNode *node = nodes[i];
         ASTFunctionData *data = node->data;
+        char **self = NULL;
+        size_t *self_lengths;
+        int self_count;
+        safe_method_call(data->self, keys, &self_count, &self_lengths, &self);
+        if (self_count > 0) {
+            char *sep = "/* ";
+            for (int j = 0; j < self_count; j++) {
+                fprintf(out, "%s%.*s", sep, (int)self_lengths[j], self[j]);
+                sep = ", ";
+                free(self[j]);
+            }
+            free(self);
+            free(self_lengths);
+            fprintf(out, " */\n");
+        } else {
+            fprintf(out, "/* Anonymous Function */\n");
+        }
         fprintf(out, "void ");
         if (data->signature->ret_type->type != NONE) {
             fprintf(out, "*");
@@ -149,7 +243,7 @@ static int define_functions(CodegenState *state, FILE *out) {
             fprintf(out, "%s", data->signature->extension->name);
         }
         int arg_count;
-        NamedArg **args = NULL;
+        NamedType **args = NULL;
         safe_method_call(data->signature->named_args, array, &arg_count, &args);
         for (int j = 0; j < arg_count; j++) {
             fprintf(out, ", void *");
@@ -346,10 +440,12 @@ char *CodeGen_Program(const void *this, UNUSED void *state, FILE *out) {
     codegen_state->indent = 0;
     codegen_state->tmp_count = 0;
     codegen_state->func_defs = data->func_defs;
+    codegen_state->class_defs = data->class_defs;
 
     include_headers(out);
     define_closures(out);
     define_builtins(out);
+    define_classes(codegen_state, out);
     define_functions(codegen_state, out);
     define_main(data, codegen_state, out);
     free(codegen_state);
@@ -384,12 +480,8 @@ char *CodeGen_Def(const void *this, void *state, FILE *out) {
     const ASTNode *lhs = data->lhs;
     const ASTNode *rhs = data->rhs;
     ASTNodeVTable *vtable = lhs->vtable;
-    ASTStatementData *lhs_data = lhs->data;
-    VarType *lhs_type = lhs_data->type;
     char *lhs_code = vtable->codegen(lhs, state, out);
     vtable = rhs->vtable;
-    ASTStatementData *rhs_data = rhs->data;
-    VarType *rhs_type = rhs_data->type;
     char *rhs_code = vtable->codegen(rhs, state, out);
     char *ret = NULL;
     append_string(&ret, "%s = ", lhs_code);
@@ -407,7 +499,6 @@ char *CodeGen_Return(const void *this, void *state, FILE *out) {
         const ASTNode *ret_node = data->returns;
         ASTStatementVTable *ret_vtable = ret_node->vtable;
         char *code = ret_vtable->codegen(ret_node, state, out);
-        ASTStatementData *ret_data = ret_node->data;
         append_string(&ret, " %s", code);
         free(code);
     }
@@ -426,9 +517,9 @@ char *CodeGen_Expression(const void *this, void *state, FILE *out) {
                        *arg_vtable;
     ASTStatementData *expr_data = expr_node->data, *ext_data, *arg_data;
     int arg_count;
-    char *func_code, *ret, **arg_codes, *ext_code = NULL;
+    char *func_code, *ret, **arg_codes, *ext_code = NULL, *code;
     FuncType *function;
-    NamedArg **arg_types = NULL;
+    NamedType **arg_types = NULL;
     VarType **passed_types, *ext_type = NULL;
 
     switch(expr->type) {
@@ -501,6 +592,13 @@ char *CodeGen_Expression(const void *this, void *state, FILE *out) {
             free(arg_types);
             free(passed_types);
             fprintf(out, ");\n");
+            return ret;
+        case EXPR_CLASS:
+            code = expr_vtable->codegen(expr_node, state, out);;
+            safe_asprintf(&ret, "tmp%d", cg_state->tmp_count++);
+            print_indent(cg_state->indent, out);
+            fprintf(out, "void *%s = call(%s);\n", ret, code);
+            free(code);
             return ret;
         case EXPR_VALUE:
             return expr_vtable->codegen(expr_node, state, out);
@@ -577,7 +675,18 @@ char *CodeGen_Function(const void *this, void *state, FILE *out) {
 }
 
 char *CodeGen_Class(const void *this, void *state, FILE *out) {
-    return strdup("CLASS");
+    CodegenState *cg_state = state;
+    const ASTNode *node = this;
+    ASTClassData *data = node->data;
+    VarType *type = data->type;
+    ClassType *class = type->class;
+    char *ret;
+    safe_asprintf(&ret, "tmp%d", cg_state->tmp_count++);
+    print_indent(cg_state->indent, out);
+    fprintf(out, "void *%s;\n", ret);
+    print_indent(cg_state->indent, out);
+    fprintf(out, "build_closure(%s, new_class%d);\n", ret, class->classID);
+    return ret;
 }
 
 char *CodeGen_Int(const void *this, void *state, FILE *out) {
@@ -591,17 +700,23 @@ char *CodeGen_Int(const void *this, void *state, FILE *out) {
     return ret;
 }
 
-char *CodeGen_Double(const void *this, void *state, FILE *out) {
+char *CodeGen_Double(UNUSED const void *this,
+                     UNUSED void *state,
+                     UNUSED FILE *out) {
     return strdup("DOUBLE");
 }
 
-char *CodeGen_Variable(const void *this, void *state, FILE *out) {
+char *CodeGen_Variable(const void *this,
+                       UNUSED void *state,
+                       UNUSED FILE *out) {
     const ASTNode *node = this;
     ASTVariableData *data = node->data;
     return strdup(data->name);
 }
 
-char *CodeGen_TypedVar(const void *this, void *state, FILE *out) {
+char *CodeGen_TypedVar(const void *this,
+                       UNUSED void *state,
+                       UNUSED FILE *out) {
     const ASTNode *node = this;
     ASTTypedVarData *data = node->data;
     return strdup(data->name);

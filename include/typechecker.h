@@ -6,36 +6,43 @@
 #include "stack.h"
 
 typedef struct var_type      VarType;
-typedef struct named_arg     NamedArg;
+typedef struct named_type    NamedType;
 typedef struct func_type     FuncType;
-typedef struct gettype_state GetTypeState;
+typedef struct class_type    ClassType;
 
 struct var_type {
     enum { BUILTIN, FUNCTION, NONE, REFERENCE, HOLD, CLASS, RETURN } type;
     union {
         enum { INT, DOUBLE } builtin;
         FuncType *function;
+        ClassType *class;
         VarType *sub_type;
     };
     int is_ref;
 };
 
-struct named_arg {
+struct named_type {
     char    *name;
     VarType *type;
 };
 
 struct func_type {
-    const Vector *named_args; // Vector<NamedArg*>
+    const Vector *named_args; // Vector<NamedType*>
     VarType      *ret_type;
-    NamedArg     *extension;
+    NamedType    *extension;
+};
+
+struct class_type {
+    const Vector *fields; // Vector<NamedType*>
+    int classID;
 };
 
 int add_builtins(const Map*);
 
 void free_VarType(void*);
 void free_FuncType(void*);
-void free_NamedArg(void*);
+void free_ClassType(void*);
+void free_NamedType(void*);
 
 int new_VarType(const char *type, VarType **vartype_ptr);
 int new_ReturnType(VarType **vartype_ptr, VarType *sub_type);
@@ -44,7 +51,7 @@ int new_RefType  (VarType **vartype_ptr, VarType *sub_type);
 int new_HoldType (VarType **vartype_ptr, VarType *ref_type);
 int new_ClassType(VarType **vartype_ptr);
 int new_VarType_from_FuncType(FuncType *type, VarType **vartype_ptr);
-int new_NamedArg(char *name, VarType *type, NamedArg **namedarg_ptr);
+int new_NamedArg(char *name, VarType *type, NamedType **namedarg_ptr);
 int new_FuncType(const Vector *args,
                  VarType *ret_type,
                  FuncType **functype_ptr);

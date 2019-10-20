@@ -45,14 +45,14 @@
 %param { const char *filename } { yyscan_t scanner }
 
 %union {
-    int      int_val;
-    double   double_val;
-    char     *str_val;
-    ASTNode  const *ast;
-    Vector   const *vec;
-    VarType  *var_type;
-    NamedArg *named_arg;
-    FuncType *func_type;
+    int       int_val;
+    double    double_val;
+    char      *str_val;
+    ASTNode   const *ast;
+    Vector    const *vec;
+    VarType   *var_type;
+    NamedType *named_arg;
+    FuncType  *func_type;
 }
 
 %token             T_INDENT T_OUTDENT T_ERROR T_NEWLINE T_FUNC T_RETURN T_REF
@@ -266,7 +266,7 @@ args:
     type_def
         {
             $$ = new_Vector(0);
-            NamedArg *arg = NULL;
+            NamedType *arg = NULL;
             safe_function_call(new_NamedArg, NULL, $1, &arg);
             safe_method_call($$, append, arg);
         }
@@ -278,7 +278,7 @@ args:
   | args ',' type_def
         {
             $$ = $1;
-            NamedArg *arg = NULL;
+            NamedType *arg = NULL;
             safe_function_call(new_NamedArg, NULL, $3, &arg);
             safe_method_call($$, append, arg);
         }
