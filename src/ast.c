@@ -4,6 +4,7 @@
 #include "Tlang_parser.h"
 #include "safe.h"
 #include "codegen.h"
+#include "builtins.h"
 
 static void json_vector(const Vector *vec,
                         int indent,
@@ -44,7 +45,7 @@ static void free_program(const void *this) {
     data->statements->free(data->statements, free_ASTNode);
     data->symbols->free(data->symbols, free_VarType);
     data->func_defs->free(data->func_defs, free);
-    data->class_defs->free(data->class_defs, free);
+    data->class_defs->free(data->class_defs, free_VarType);
     free(data->loc);
     free(node->data);
     free(node->vtable);
@@ -101,9 +102,9 @@ const ASTNode *new_ProgramNode(struct YYLTYPE *loc, const Vector *statements) {
     else
         data->statements = new_Vector(0);
     data->symbols      = new_Map(0, 0);
-    safe_function_call(add_builtins, data->symbols);
+    data->class_defs   = new_Vector(0);
+    safe_function_call(add_builtins, data->symbols, data->class_defs);
     data->func_defs    = new_Map(0, 0);
-    data->class_defs   = new_Map(0, 0);
     vtable->free       = free_program;
     vtable->json       = json_program;
     vtable->type_check = TypeCheck_Program;
@@ -184,6 +185,7 @@ const ASTNode *new_AssignmentNode(struct YYLTYPE *loc, const void *lhs,
     vtable->json     = json_assignment;
     vtable->get_type = GetType_Assignment;
     vtable->get_vars = GetVars_Assignment;
+	vtable->get_name = GetName_Assignment;
     vtable->codegen  = CodeGen_Assignment;
     return node;
 }
@@ -261,6 +263,7 @@ const ASTNode *new_DefNode(struct YYLTYPE *loc, const void *lhs,
     vtable->json     = json_def;
     vtable->get_type = GetType_Def;
     vtable->get_vars = GetVars_Def;
+	vtable->get_name = GetName_Def;
     vtable->codegen  = CodeGen_Def;
     return node;
 }
@@ -329,12 +332,13 @@ const ASTNode *new_ReturnNode(struct YYLTYPE *loc, const void *value) {
         return NULL;
     }
     memcpy(data->loc, loc, sizeof(*loc));
-    data->returns = value;
-    data->type = NULL;
+    data->returns    = value;
+    data->type       = NULL;
     vtable->free     = free_return;
     vtable->json     = json_return;
     vtable->get_type = GetType_Return;
     vtable->get_vars = GetVars_Return;
+	vtable->get_name = GetName_Return;
     vtable->codegen  = CodeGen_Return;
     return node;
 }
@@ -403,6 +407,7 @@ const ASTNode *new_ExpressionNode(struct YYLTYPE *loc, const Vector *exprs) {
     vtable->json     = json_expression;
     vtable->get_type = GetType_Expression;
     vtable->get_vars = GetVars_Expression;
+	vtable->get_name = GetName_Expression;
     vtable->codegen  = CodeGen_Expression;
     return node;
 }
@@ -467,6 +472,7 @@ const ASTNode *new_RefNode(struct YYLTYPE *loc, const ASTNode *expr) {
     vtable->json     = json_ref;
     vtable->get_type = GetType_Ref;
     vtable->get_vars = GetVars_Ref;
+	vtable->get_name = GetName_Ref;
     vtable->codegen  = CodeGen_Ref;
     return node;
 }
@@ -534,6 +540,7 @@ const ASTNode *new_ParenNode(struct YYLTYPE *loc, const ASTNode *val) {
     vtable->json     = json_paren;
     vtable->get_type = GetType_Paren;
     vtable->get_vars = GetVars_Paren;
+	vtable->get_name = GetName_Paren;
     vtable->codegen  = CodeGen_Paren;
     return node;
 }
@@ -602,6 +609,7 @@ const ASTNode *new_HoldNode(struct YYLTYPE *loc, const ASTNode *val) {
     vtable->json     = json_hold;
     vtable->get_type = GetType_Hold;
     vtable->get_vars = GetVars_Hold;
+	vtable->get_name = GetName_Hold;
     vtable->codegen  = CodeGen_Hold;
     return node;
 }
@@ -687,6 +695,7 @@ const ASTNode *new_FunctionNode(struct YYLTYPE *loc,
     vtable->json =     json_function;
     vtable->get_type = GetType_Function;
     vtable->get_vars = GetVars_Function;
+	vtable->get_name = GetName_Function;
     vtable->codegen  = CodeGen_Function;
     return node;
 }
@@ -699,7 +708,7 @@ static void free_class(const void *this) {
     data->inheritance->free(data->inheritance, free);
     data->stmts->free(data->stmts, free_ASTNode);
     data->symbols->free(data->symbols, free_VarType);
-    data->fields->free(data->fields, free_VarType);
+    data->fields->free(data->fields, NULL);
     data->self->free(data->self, NULL);
     free(data->loc);
     free(node->data);
@@ -768,6 +777,7 @@ const ASTNode *new_ClassNode(struct YYLTYPE *loc,
     vtable->json     = json_class;
     vtable->get_type = GetType_Class;
     vtable->get_vars = GetVars_Class;
+	vtable->get_name = GetName_Class;
     vtable->codegen  = CodeGen_Class;
     return node;
 }
@@ -833,6 +843,7 @@ const ASTNode *new_VariableNode(struct YYLTYPE *loc, char *name) {
     vtable->json        = json_variable;
     vtable->get_type    = GetType_Variable;
     vtable->get_vars    = GetVars_Variable;
+    vtable->get_name    = GetName_Variable;
     vtable->assign_type = AssignType_Variable;
     vtable->codegen     = CodeGen_Variable;
     return node;
@@ -867,6 +878,7 @@ static void json_typed_var(const void *this, int indent, FILE *out) {
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
     fprintf(out, "\"given type\": ");
     json_VarType(data->given_type, indent, out);
+    fprintf(out, "\n");
     indent--;
     fprintf(out, "%*s}", indent * JSON_TAB_WIDTH, "");
 }
@@ -906,6 +918,7 @@ const ASTNode *new_TypedVarNode(struct YYLTYPE *loc,
     vtable->json        = json_typed_var;
     vtable->get_type    = GetType_TypedVar;
     vtable->get_vars    = GetVars_TypedVar;
+	vtable->get_name    = GetName_TypedVar;
     vtable->assign_type = AssignType_TypedVar;
     vtable->codegen     = CodeGen_TypedVar;
     return node;
@@ -967,11 +980,13 @@ const ASTNode *new_IntNode(struct YYLTYPE *loc, int val) {
     }
     memcpy(data->loc, loc, sizeof(*loc));
     data->val = val;
-    safe_function_call(new_VarType, "int", &data->type);
+    safe_function_call(new_ObjectType, &data->type);
+    data->type->object->classID = INT;
     vtable->free        = free_int;
     vtable->json        = json_int;
     vtable->get_type    = GetType_Int;
     vtable->get_vars    = GetVars_Int;
+	vtable->get_name    = GetName_Int;
     vtable->codegen     = CodeGen_Int;
     return node;
 }
@@ -1032,11 +1047,13 @@ const ASTNode *new_DoubleNode(struct YYLTYPE *loc, double val) {
     }
     memcpy(data->loc, loc, sizeof(*loc));
     data->val = val;
-    safe_function_call(new_VarType, "double", &data->type);
+    safe_function_call(new_ObjectType, &data->type);
+    data->type->object->classID = DOUBLE;
     vtable->free     = free_double;
     vtable->json     = json_double;
     vtable->get_type = GetType_Double;
     vtable->get_vars = GetVars_Double;
+	vtable->get_name = GetName_Double;
     vtable->codegen  = CodeGen_Double;
     return node;
 }
@@ -1071,51 +1088,37 @@ static void json_VarType(const void *this, int indent, FILE *out) {
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
     fprintf(out, "\"type\": ");
     const VarType *type = this;
-    switch(type->type) {
-        case BUILTIN:
-            switch(type->builtin) {
-                case INT:
-                    fprintf(out, "\"int\"\n");
-                    break;
-                case DOUBLE:
-                    fprintf(out, "\"double\"\n");
-                    break;
-            }
-            break;
-        case NONE:
-            fprintf(out, "\"none\"\n");
-            break;
-        case FUNCTION:
-            fprintf(out, "\"func\",\n");
-            fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
-            fprintf(out, "\"signature\": ");
-            json_FuncType(type->function, indent, out);
-            fprintf(out, "\n");
-            break;
-        case REFERENCE:
-            fprintf(out, "\"ref\",\n");
-            fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
-            fprintf(out, "\"ref_type\": ");
-            json_VarType(type->sub_type, indent, out);
-            fprintf(out, "\n");
-            break;
-        case CLASS:
-            fprintf(out, "\"class\"\n");
-            break;
-        case HOLD:
-            fprintf(out, "\"hold\"\n");
-            fprintf(out, "\"hold_type\": ");
-            json_VarType(type->sub_type, indent, out);
-            fprintf(out, "\n");
-            break;
-        case RETURN:
-            fprintf(out, "\"return\"\n");
-            if (type->sub_type != NULL) {
-                fprintf(out, "\"ret_type\": ");
+    if (type == NULL) {
+        fprintf(out, "\"none\"\n");
+    } else {
+        switch (type->type) {
+            case FUNCTION:
+                fprintf(out, "\"func\",\n");
+                fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
+                fprintf(out, "\"signature\": ");
+                json_FuncType(type->function, indent, out);
+                fprintf(out, "\n");
+                break;
+            case REFERENCE:
+                fprintf(out, "\"ref\",\n");
+                fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
+                fprintf(out, "\"ref_type\": ");
                 json_VarType(type->sub_type, indent, out);
                 fprintf(out, "\n");
-            }
-            break;
+                break;
+            case CLASS:
+                fprintf(out, "\"class\"\n");
+                break;
+            case OBJECT:
+                fprintf(out, "\"object\"\n");
+                break;
+            case HOLD:
+                fprintf(out, "\"hold\"\n");
+                fprintf(out, "\"hold_type\": ");
+                json_VarType(type->sub_type, indent, out);
+                fprintf(out, "\n");
+                break;
+        }
     }
     indent--;
     fprintf(out, "%*s}", indent * JSON_TAB_WIDTH, "");

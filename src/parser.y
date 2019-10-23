@@ -127,11 +127,6 @@ expression:
   | func_block
         {
             $$ = $1;
-            /*
-            const Vector *v = new_Vector(1);
-            safe_method_call(v, append, $1);
-            $$ = new_ExpressionNode(&@$, v);
-             */
         }
   | T_CLASS opt_inheritance opt_stmts
         {
@@ -213,12 +208,8 @@ type_def:
 type:
     T_IDENT
         {
-            safe_function_call(new_VarType, $1, &$$);
-            free($1);
-        }
-  | T_CLASS
-        {
-            safe_function_call(new_ClassType, &$$);
+            safe_function_call(new_ObjectType, &$$);
+            $$->object->className = $1;
         }
   | func_def
         {
@@ -291,7 +282,7 @@ args:
 opt_return_type:
     %empty
         {
-            safe_function_call(new_NoneType, &$$);
+            $$ = NULL;
         }
   | T_ARROW type_def
         {

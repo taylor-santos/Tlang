@@ -6,9 +6,9 @@
 
 struct vector_data {
     const void **values;
-    int capacity;
-    int cap_diff;
-    int size;
+    size_t capacity;
+    size_t cap_diff;
+    size_t size;
 };
 
 static int vector_append(const Vector *this, const void *val) {
@@ -27,9 +27,9 @@ static int vector_append(const Vector *this, const void *val) {
     return 0;
 }
 
-static int vector_get(const Vector *this, int index, const void *val_ptr) {
+static int vector_get(const Vector *this, size_t index, const void *val_ptr) {
     struct vector_data *data = this->data;
-    if (index < 0 || index >= data->size) {
+    if (index >= data->size) {
         return 1;
     }
     if (val_ptr == NULL) {
@@ -39,10 +39,10 @@ static int vector_get(const Vector *this, int index, const void *val_ptr) {
     return 0;
 }
 
-static int vector_put(const Vector *this, int index, const void *element,
+static int vector_put(const Vector *this, size_t index, const void *element,
                       const void *prev_ptr) {
     struct vector_data *data = this->data;
-    if (index < 0 || index >= data->size) {
+    if (index >= data->size) {
         return 1;
     }
     if (prev_ptr != NULL) {
@@ -52,27 +52,31 @@ static int vector_put(const Vector *this, int index, const void *element,
     return 0;
 }
 
-static int vector_remove(const Vector *this, int index, const void *prev_ptr) {
+static int vector_remove(const Vector *this,
+                         size_t index,
+                         const void *prev_ptr) {
     struct vector_data *data = this->data;
-    if (index < 0 || index >= data->size) {
+    if (index >= data->size) {
         return 1;
     }
     if (prev_ptr != NULL) {
         *(const void**)prev_ptr = data->values[index];
     }
-    for (int i = index; i < data->size - 1; i++) {
+    for (size_t i = index; i < data->size - 1; i++) {
         data->values[i] = data->values[i + 1];
     }
     data->size--;
     return 0;
 }
 
-static int vector_size(const Vector *this) {
+static size_t vector_size(const Vector *this) {
     struct vector_data *data = this->data;
     return data->size;
 }
 
-static int vector_array(const Vector *this, int *size, const void *array_ptr) {
+static int vector_array(const Vector *this,
+                        size_t *size,
+                        const void *array_ptr) {
     if (size == NULL) {
         return 1;
     }
@@ -98,7 +102,7 @@ static int vector_array(const Vector *this, int *size, const void *array_ptr) {
 static void vector_free(const Vector *this, void (*free_val)(void*)) {
     struct vector_data *data = this->data;
     if (free_val != NULL) {
-        for (int i = 0; i < data->size; i++) {
+        for (size_t i = 0; i < data->size; i++) {
             free_val((void*)data->values[i]);
         }
     }
@@ -110,7 +114,7 @@ static void vector_free(const Vector *this, void (*free_val)(void*)) {
 static void vector_clear(const Vector *this, void (*free_val)(void*)) {
     struct vector_data *data = this->data;
     if (free_val != NULL) {
-        for (int i = 0; i < data->size; i++) {
+        for (size_t i = 0; i < data->size; i++) {
             free_val((void*)data->values[i]);
         }
     }
@@ -127,7 +131,7 @@ static int vector_copy(const Vector *this,
     *copy_ptr = new_Vector(data->capacity);
     struct vector_data *copy_data = (*copy_ptr)->data;
     copy_data->cap_diff = data->cap_diff;
-    for (int i = 0; i < data->size; i++) {
+    for (size_t i = 0; i < data->size; i++) {
         const void *new_val = NULL;
         if (val_copy != NULL) {
             safe_function_call(val_copy, data->values[i], &new_val);
@@ -141,12 +145,12 @@ static int vector_copy(const Vector *this,
     return 0;
 }
 
-const Vector *new_Vector(int capacity) {
+const Vector *new_Vector(size_t capacity) {
     struct vector_data *data = malloc(sizeof(*data));
     if (data == NULL) {
         return NULL;
     }
-    int cap = capacity > 0 ? capacity : VECTOR_CAPACITY;
+    size_t cap = capacity > 0 ? capacity : VECTOR_CAPACITY;
     data->capacity = data->cap_diff = cap;
     data->values = malloc(cap * sizeof(const void*));
     if (data->values == NULL) {

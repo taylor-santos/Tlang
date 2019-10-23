@@ -29,4 +29,4 @@ add_executable(tcc
         src/typechecker.c
         src/codegen.c
         src/safe.c
-)
+        include/builtins.h src/builtins.c)

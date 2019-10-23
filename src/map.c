@@ -228,7 +228,7 @@ int map_copy(const Map *this,
 }
 
 int map_keys(const Map *this,
-             int *count,
+             size_t *count,
              size_t **lengths,
              const void *array_ptr) {
     if (array_ptr == NULL || lengths == NULL || count == NULL) {
@@ -250,7 +250,7 @@ int map_keys(const Map *this,
         free(lengths);
         return 1;
     }
-    int curr_index = 0;
+    size_t curr_index = 0;
     for (size_t i = 0; i < data->capacity; i++) {
         for (Entry *curr = data->entries[i]; curr != NULL; curr = curr->next) {
             (*lengths)[curr_index] = curr->len;
