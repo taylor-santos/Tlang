@@ -109,6 +109,9 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
             case T_REF:
                 printf("REF\n");
                 return 1;
+            case T_DEFINE:
+                printf("DEFINE\n");
+                return 1;
             case T_ARROW:
                 printf("ARROW\n");
                 return 1;
@@ -240,10 +243,18 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
         push_token((Token){.type=T_IDENT,  .value.str_val=val});
     }
 
-    [\n\r]* {
+    ;?[\n\r]+ {
         BEGIN(INITIAL);
         push_token((Token){.type=T_NEWLINE});
         indent = 0;
+        enum yytokentype type;
+        if (pop_token_queue(yylval, &type, yylloc)) {
+            return type;
+        }
+    }
+
+    ; {
+        push_token((Token){.type=T_NEWLINE});
         enum yytokentype type;
         if (pop_token_queue(yylval, &type, yylloc)) {
             return type;
