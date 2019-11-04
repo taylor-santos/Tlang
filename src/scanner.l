@@ -162,6 +162,18 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
 ^[ \t]*[\n\r]+          // Ignore empty lines
 ^[ \t]*[/]{2}.*[\n\r]+  // Ignore lines with just comments
 
+^" "+\t {
+    yyerror(yylloc, NULL, filename, yyscanner,
+        "inconsistent use of tabs and spaces in indentation");
+    return T_ERROR;
+}
+
+^\t+" " {
+    yyerror(yylloc, NULL, filename, yyscanner,
+        "inconsistent use of tabs and spaces in indentation");
+    return T_ERROR;
+}
+
 ^" "+ {
     if (indent_type == NOT_SET) {
         indent_type = SPACES;
@@ -243,7 +255,7 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
         push_token((Token){.type=T_IDENT,  .value.str_val=val});
     }
 
-    ;?[\n\r]+ {
+    [\n\r]+ {
         BEGIN(INITIAL);
         push_token((Token){.type=T_NEWLINE});
         indent = 0;

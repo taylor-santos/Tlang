@@ -62,8 +62,9 @@
 %token<str_val>    T_IDENT
 
 %type<ast>       file statement l_value r_expr sub_expr expression func_block
+                 return
 %type<vec>       stmts opt_args args opt_named_args named_args call_list
-                 opt_inheritance inheritance opt_stmts
+                 return_stmts
 %type<var_type>  type_def opt_return_type type
 %type<func_type> func_def named_func_def
 %type<named_arg> named_type_def opt_extension opt_named_extension
@@ -83,19 +84,46 @@ file:
         }
 
 stmts:
-    statement
+    statement T_NEWLINE
         {
             $$ = new_Vector(0);
             safe_method_call($$, append, $1);
         }
-  | stmts statement
+  | stmts statement T_NEWLINE
         {
             $$ = $1;
             safe_method_call($$, append, $2);
         }
 
+return_stmts:
+    stmts statement
+        {
+            $1->append($1, $2);
+            $$ = $1;
+        }
+  | return
+        {
+            $$ = new_Vector(0);
+            $$->append($$, $1);
+        }
+  | stmts return
+        {
+            $1->append($1, $2);
+            $$ = $1;
+        }
+
+return:
+    T_RETURN expression
+        {
+            $$ = new_ReturnNode(&@$, $2);
+        }
+  | T_RETURN
+        {
+            $$ = new_ReturnNode(&@$, NULL);
+        }
+
 statement:
-    T_IDENT ':' type_def T_NEWLINE
+    T_IDENT ':' type_def
         {
             $$ = new_TypedVarNode(&@$, $1, $3);
         }
@@ -103,34 +131,15 @@ statement:
         {
             $$ = $1;
         }
-  | T_RETURN expression
-        {
-            $$ = new_ReturnNode(&@$, $2);
-        }
-  | T_RETURN T_NEWLINE
-        {
-            $$ = new_ReturnNode(&@$, NULL);
-        }
-
-func_block:
-    opt_named_extension named_func_def opt_stmts
-        {
-            $2->extension = $1;
-            $$ = new_FunctionNode(&@$, $2, $3);
-        }
 
 expression:
-    call_list T_NEWLINE
+    call_list
         {
             $$ = new_ExpressionNode(&@$, $1);
         }
   | func_block
         {
             $$ = $1;
-        }
-  | T_CLASS opt_inheritance opt_stmts
-        {
-            $$ = new_ClassNode(&@$, $2, $3);
         }
   | l_value T_DEFINE expression
         {
@@ -142,14 +151,16 @@ expression:
             $$ = new_AssignmentNode(&@$, lhs, $3);
         }
 
-opt_stmts:
-    T_NEWLINE
+func_block:
+    opt_named_extension named_func_def return_stmts
         {
-            $$ = new_Vector(0);
+            $2->extension = $1;
+            $$ = new_FunctionNode(&@$, $2, $3);
         }
-  | T_NEWLINE T_INDENT stmts T_OUTDENT T_NEWLINE
+  | opt_named_extension named_func_def T_NEWLINE T_INDENT return_stmts T_NEWLINE T_OUTDENT
         {
-            $$ = $3;
+            $2->extension = $1;
+            $$ = new_FunctionNode(&@$, $2, $5);
         }
 
 call_list:
@@ -217,7 +228,7 @@ type:
         }
         
 named_func_def:
-    T_FUNC opt_named_args opt_return_type
+    T_FUNC opt_named_args opt_return_type T_ARROW
         {
             safe_function_call(new_FuncType, $2, $3, &$$);
         }
@@ -284,7 +295,7 @@ opt_return_type:
         {
             $$ = NULL;
         }
-  | T_ARROW type_def
+  | ':' type_def
         {
             $$ = $2;
         }
@@ -343,28 +354,6 @@ named_type_def:
     T_IDENT ':' type_def
         {
             safe_function_call(new_NamedArg, $1, $3, &$$);
-        }
-
-opt_inheritance:
-    %empty
-        {
-            $$ = new_Vector(0);
-        }
-  | ':' inheritance
-        {
-            $$ = $2;
-        }
-
-inheritance:
-    T_IDENT
-        {
-            $$ = new_Vector(0);
-            safe_method_call($$, append, $1);
-        }
-  | inheritance ',' T_IDENT
-        {
-            $$ = $1;
-            safe_method_call($$, append, $3);
         }
 
 %%
