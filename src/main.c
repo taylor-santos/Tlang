@@ -17,27 +17,28 @@ void *malloc_check(size_t size);
 char *strdup_check(const char *s);
 
 static struct option options[] = {
-    {"help",    no_argument, 0, 'h'},
-    {"version", no_argument, 0, 'v'},
-    {0, 0, 0, 0}
+        { "help",    no_argument, 0, 'h' },
+        { "version", no_argument, 0, 'v' },
+        { 0, 0,                   0, 0 }
 };
 
-static char* options_help[] = {
-    "--help        Display this information.",
-    "--version     Display compiler version information.",
-    "-o <file>     Place the output into <file>."
+static char *options_help[] = {
+        "--help        Display this information.",
+        "--version     Display compiler version information.",
+        "-o <file>     Place the output into <file>."
 };
 
 int main(int argc, char *argv[]) {
-    int opt, opt_index, file_count, i, status = 0;
-    char *out_filename = NULL, *err;
-    FILE **inputs, *output;
-    yyscan_t scanner;
+    int             opt, opt_index, file_count, i, status = 0;
+    char            *out_filename                         = NULL, *err;
+    FILE            **inputs, *output;
+    yyscan_t        scanner;
     YY_BUFFER_STATE state;
 
     opterr = 0;
-    while ((opt =
-        getopt_long(argc, argv, "o:h", options, &opt_index)) != -1) {
+
+    while (-1 != (
+            opt = getopt_long(argc, argv, "o:h", options, &opt_index))) {
         switch (opt) {
             case 'o':
                 out_filename = strdup_check(optarg);
@@ -53,19 +54,16 @@ int main(int argc, char *argv[]) {
                 exit(EXIT_FAILURE);
         }
     }
-    file_count = argc - optind;
+    file_count  = argc - optind;
     if (file_count == 0) {
         fprintf(stderr, ERROR "no input files\n");
         exit(EXIT_FAILURE);
     }
-    inputs = malloc_check(sizeof(FILE*) * file_count);
-    for(i = 0; i < file_count; i++) {
+    inputs = malloc_check(sizeof(FILE *) * file_count);
+    for (i = 0; i < file_count; i++) {
         inputs[i] = fopen(argv[optind + i], "r");
         if (inputs[i] == NULL) {
-            asprintf(&err,
-                ERROR "unable to open file '%s'",
-                argv[optind + i]
-            );
+            asprintf(&err, ERROR "unable to open file '%s'", argv[optind + i]);
             perror(err);
             free(err);
             status = 1;
@@ -77,10 +75,7 @@ int main(int argc, char *argv[]) {
         output = fopen("a.out.c", "w+");
     }
     if (output == NULL) {
-        asprintf(&err,
-            ERROR "unable to open file '%s'",
-            argv[optind + i]
-        );
+        asprintf(&err, ERROR "unable to open file '%s'", argv[optind + i]);
         perror(err);
         free(err);
         status = 1;
@@ -104,18 +99,22 @@ int main(int argc, char *argv[]) {
             ASTProgramVTable *vtable = AST->vtable;
             vtable->json(AST, 0, stdout);
             printf("\n");
+            /*
             if (!vtable->type_check(AST)) {
+                ASTProgramData *data = AST->data;
+                print_Map(data->symbols, print_VarType);
+                /*
                 if (!vtable->codegen(AST, NULL, output)) {
                 } else {
                     printf("Code generation failed!\n");
                 }
+                 *//*
             } else {
                 printf("Type checker failed!\n");
             }
-            ASTProgramData *data = AST->data;
-            print_Map(data->symbols, print_VarType);
-		    vtable->free(AST);
-	    }
+            */
+            vtable->free(AST);
+        }
 
         yy_delete_buffer(state, scanner);
         yylex_destroy(scanner);

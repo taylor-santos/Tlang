@@ -12,7 +12,7 @@ typedef struct class_type   ClassType;
 typedef struct object_type  ObjectType;
 
 struct var_type {
-    enum { FUNCTION, REFERENCE, HOLD, CLASS, OBJECT } type;
+    enum { FUNCTION, REFERENCE, HOLD, CLASS, OBJECT, RETURN } type;
     union {
         FuncType *function;
         ClassType *class;
@@ -55,6 +55,7 @@ void free_ObjectType(void*);
 void free_NamedType(void*);
 
 int new_RefType   (VarType **vartype_ptr, VarType *sub_type);
+int new_RetType   (VarType **vartype_ptr, VarType *sub_type);
 int new_HoldType  (VarType **vartype_ptr, VarType *ref_type);
 int new_ClassType (VarType **vartype_ptr);
 int new_ObjectType(VarType **vartype_ptr);

@@ -6,17 +6,21 @@
 #include "codegen.h"
 #include "builtins.h"
 
-static void json_vector(const Vector *vec,
-                        int indent,
-                        FILE *out,
-                        void(*element_json)(const void*, int, FILE*));
-static void json_VarType (const void *this, int indent, FILE *out);
+static void json_vector(
+        const Vector *vec,
+        int indent,
+        FILE *out,
+        void(*element_json)(const void *, int, FILE *)
+);
+static void json_VarType(const void *this, int indent, FILE *out);
 static void json_NamedArg(const void *this, int indent, FILE *out);
 static void json_FuncType(const void *this, int indent, FILE *out);
-static void json_string  (const void *this, int indent, FILE *out);
+static void json_string(const void *this, int indent, FILE *out);
 
 void free_Expression(void *this) {
-    if (this == NULL) return;
+    if (this == NULL) {
+        return;
+    }
     Expression *expr = this;
     if (expr->type == EXPR_FUNC) {
         expr->args->free(expr->args, NULL);
@@ -25,22 +29,26 @@ void free_Expression(void *this) {
 }
 
 void free_ASTNode(void *this) {
-    if (this == NULL) return;
+    if (this == NULL) {
+        return;
+    }
     // Call the vtable->free() function on any subtype of an AST node
-    const ASTNode *node = this;
+    const ASTNode *node   = this;
     ASTNodeVTable *vtable = node->vtable;
     vtable->free(node);
 }
 
 static void json_ASTNode(const void *this, int indent, FILE *out) {
-    const ASTNode *node = this;
+    const ASTNode *node   = this;
     ASTNodeVTable *vtable = node->vtable;
     vtable->json(node, indent, out);
 }
 
 static void free_program(const void *this) {
-    if (this == NULL) return;
-    const ASTNode *node = this;
+    if (this == NULL) {
+        return;
+    }
+    const ASTNode  *node = this;
     ASTProgramData *data = node->data;
     data->statements->free(data->statements, free_ASTNode);
     data->symbols->free(data->symbols, free_VarType);
@@ -49,7 +57,7 @@ static void free_program(const void *this) {
     free(data->loc);
     free(node->data);
     free(node->vtable);
-    free((void*)node);
+    free((void *) node);
 }
 
 static void json_program(const void *this, int indent, FILE *out) {
@@ -58,10 +66,13 @@ static void json_program(const void *this, int indent, FILE *out) {
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
     fprintf(out, "\"type\": \"Program\",\n");
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
-    const ASTNode *node = this;
+    const ASTNode  *node = this;
     ASTProgramData *data = node->data;
-    fprintf(out, "\"loc\": \"%d:%d-%d:%d\",\n", data->loc->first_line, 
-            data->loc->first_column, data->loc->last_line,
+    fprintf(out,
+            "\"loc\": \"%d:%d-%d:%d\",\n",
+            data->loc->first_line,
+            data->loc->first_column,
+            data->loc->last_line,
             data->loc->last_column);
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
     fprintf(out, "\"statements\": ");
@@ -88,8 +99,8 @@ const ASTNode *new_ProgramNode(struct YYLTYPE *loc, const Vector *statements) {
         free(node);
         return NULL;
     }
-    node->vtable = vtable;
-    data->loc = malloc(sizeof(*loc));
+    node->vtable     = vtable;
+    data->loc        = malloc(sizeof(*loc));
     if (data->loc == NULL) {
         free(vtable);
         free(data);
@@ -97,10 +108,11 @@ const ASTNode *new_ProgramNode(struct YYLTYPE *loc, const Vector *statements) {
         return NULL;
     }
     memcpy(data->loc, loc, sizeof(*loc));
-    if (statements)
+    if (statements) {
         data->statements = statements;
-    else
+    } else {
         data->statements = new_Vector(0);
+    }
     data->symbols      = new_Map(0, 0);
     data->class_defs   = new_Vector(0);
     safe_function_call(add_builtins, data->symbols, data->class_defs);
@@ -113,15 +125,17 @@ const ASTNode *new_ProgramNode(struct YYLTYPE *loc, const Vector *statements) {
 }
 
 static void free_assignment(const void *this) {
-    if (this == NULL) return;
-    const ASTNode *node = this;
+    if (this == NULL) {
+        return;
+    }
+    const ASTNode     *node = this;
     ASTAssignmentData *data = node->data;
-    free_ASTNode((void*)data->lhs);
-    free_ASTNode((void*)data->rhs);
+    free_ASTNode((void *) data->lhs);
+    free_ASTNode((void *) data->rhs);
     free(data->loc);
     free(node->data);
     free(node->vtable);
-    free((void*)node);
+    free((void *) node);
 }
 
 static void json_assignment(const void *this, int indent, FILE *out) {
@@ -130,11 +144,14 @@ static void json_assignment(const void *this, int indent, FILE *out) {
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
     fprintf(out, "\"type\": \"Assignment\",\n");
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
-    const ASTNode *node = this;
+    const ASTNode     *node = this;
     ASTAssignmentData *data = node->data;
-    fprintf(out, "\"loc\": \"%d:%d-%d:%d\",\n", data->loc->first_line,
-        data->loc->first_column, data->loc->last_line,
-        data->loc->last_column);
+    fprintf(out,
+            "\"loc\": \"%d:%d-%d:%d\",\n",
+            data->loc->first_line,
+            data->loc->first_column,
+            data->loc->last_line,
+            data->loc->last_column);
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
     fprintf(out, "\"lhs\": ");
     node = data->lhs;
@@ -143,7 +160,7 @@ static void json_assignment(const void *this, int indent, FILE *out) {
     fprintf(out, ",\n");
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
     fprintf(out, "\"rhs\": ");
-    node = data->rhs;
+    node   = data->rhs;
     vtable = node->vtable;
     vtable->json(node, indent, out);
     fprintf(out, "\n");
@@ -151,8 +168,9 @@ static void json_assignment(const void *this, int indent, FILE *out) {
     fprintf(out, "%*s}", indent * JSON_TAB_WIDTH, "");
 }
 
-const ASTNode *new_AssignmentNode(struct YYLTYPE *loc, const void *lhs,
-                                  const void *rhs) {
+const ASTNode *new_AssignmentNode(
+        struct YYLTYPE *loc, const void *lhs, const void *rhs
+) {
     ASTNode *node = malloc(sizeof(*node));
     if (node == NULL) {
         return NULL;
@@ -170,7 +188,7 @@ const ASTNode *new_AssignmentNode(struct YYLTYPE *loc, const void *lhs,
         return NULL;
     }
     node->vtable = vtable;
-    data->loc = malloc(sizeof(*loc));
+    data->loc    = malloc(sizeof(*loc));
     if (data->loc == NULL) {
         free(vtable);
         free(data);
@@ -178,28 +196,30 @@ const ASTNode *new_AssignmentNode(struct YYLTYPE *loc, const void *lhs,
         return NULL;
     }
     memcpy(data->loc, loc, sizeof(*loc));
-    data->lhs = lhs;
-    data->rhs = rhs;
-    data->type = NULL;
+    data->lhs        = lhs;
+    data->rhs        = rhs;
+    data->type       = NULL;
     vtable->free     = free_assignment;
     vtable->json     = json_assignment;
     vtable->get_type = GetType_Assignment;
     vtable->get_vars = GetVars_Assignment;
-	vtable->get_name = GetName_Assignment;
+    vtable->get_name = GetName_Assignment;
     vtable->codegen  = CodeGen_Assignment;
     return node;
 }
 
 static void free_def(const void *this) {
-    if (this == NULL) return;
+    if (this == NULL) {
+        return;
+    }
     const ASTNode *node = this;
-    ASTDefData *data = node->data;
-    free_ASTNode((void*)data->lhs);
-    free_ASTNode((void*)data->rhs);
+    ASTDefData    *data = node->data;
+    free_ASTNode((void *) data->lhs);
+    free_ASTNode((void *) data->rhs);
     free(data->loc);
     free(node->data);
     free(node->vtable);
-    free((void*)node);
+    free((void *) node);
 }
 
 static void json_def(const void *this, int indent, FILE *out) {
@@ -209,9 +229,12 @@ static void json_def(const void *this, int indent, FILE *out) {
     fprintf(out, "\"type\": \"Def\",\n");
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
     const ASTNode *node = this;
-    ASTDefData *data = node->data;
-    fprintf(out, "\"loc\": \"%d:%d-%d:%d\",\n", data->loc->first_line,
-            data->loc->first_column, data->loc->last_line,
+    ASTDefData    *data = node->data;
+    fprintf(out,
+            "\"loc\": \"%d:%d-%d:%d\",\n",
+            data->loc->first_line,
+            data->loc->first_column,
+            data->loc->last_line,
             data->loc->last_column);
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
     fprintf(out, "\"lhs\": ");
@@ -221,7 +244,7 @@ static void json_def(const void *this, int indent, FILE *out) {
     fprintf(out, ",\n");
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
     fprintf(out, "\"rhs\": ");
-    node = data->rhs;
+    node   = data->rhs;
     vtable = node->vtable;
     vtable->json(node, indent, out);
     fprintf(out, "\n");
@@ -229,8 +252,9 @@ static void json_def(const void *this, int indent, FILE *out) {
     fprintf(out, "%*s}", indent * JSON_TAB_WIDTH, "");
 }
 
-const ASTNode *new_DefNode(struct YYLTYPE *loc, const void *lhs,
-                           const void *rhs) {
+const ASTNode *new_DefNode(
+        struct YYLTYPE *loc, const void *lhs, const void *rhs
+) {
     ASTNode *node = malloc(sizeof(*node));
     if (node == NULL) {
         return NULL;
@@ -248,7 +272,7 @@ const ASTNode *new_DefNode(struct YYLTYPE *loc, const void *lhs,
         return NULL;
     }
     node->vtable = vtable;
-    data->loc = malloc(sizeof(*loc));
+    data->loc    = malloc(sizeof(*loc));
     if (data->loc == NULL) {
         free(vtable);
         free(data);
@@ -256,20 +280,22 @@ const ASTNode *new_DefNode(struct YYLTYPE *loc, const void *lhs,
         return NULL;
     }
     memcpy(data->loc, loc, sizeof(*loc));
-    data->lhs = lhs;
-    data->rhs = rhs;
-    data->type = NULL;
+    data->lhs        = lhs;
+    data->rhs        = rhs;
+    data->type       = NULL;
     vtable->free     = free_def;
     vtable->json     = json_def;
     vtable->get_type = GetType_Def;
     vtable->get_vars = GetVars_Def;
-	vtable->get_name = GetName_Def;
+    vtable->get_name = GetName_Def;
     vtable->codegen  = CodeGen_Def;
     return node;
 }
 
 static void free_return(const void *this) {
-    if (this == NULL) return;
+    if (this == NULL) {
+        return;
+    }
     const ASTNode *node = this;
     ASTReturnData *data = node->data;
     if (data->returns != NULL) {
@@ -279,7 +305,7 @@ static void free_return(const void *this) {
     free(data->loc);
     free(node->data);
     free(node->vtable);
-    free((void*)node);
+    free((void *) node);
 }
 
 static void json_return(const void *this, int indent, FILE *out) {
@@ -290,9 +316,12 @@ static void json_return(const void *this, int indent, FILE *out) {
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
     const ASTNode *node = this;
     ASTReturnData *data = node->data;
-    fprintf(out, "\"loc\": \"%d:%d-%d:%d\"", data->loc->first_line,
-        data->loc->first_column, data->loc->last_line,
-        data->loc->last_column);
+    fprintf(out,
+            "\"loc\": \"%d:%d-%d:%d\"",
+            data->loc->first_line,
+            data->loc->first_column,
+            data->loc->last_line,
+            data->loc->last_column);
     if (data->returns != NULL) {
         fprintf(out, ",\n");
         fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
@@ -324,7 +353,7 @@ const ASTNode *new_ReturnNode(struct YYLTYPE *loc, const void *value) {
         return NULL;
     }
     node->vtable = vtable;
-    data->loc = malloc(sizeof(*loc));
+    data->loc    = malloc(sizeof(*loc));
     if (data->loc == NULL) {
         free(vtable);
         free(data);
@@ -338,21 +367,23 @@ const ASTNode *new_ReturnNode(struct YYLTYPE *loc, const void *value) {
     vtable->json     = json_return;
     vtable->get_type = GetType_Return;
     vtable->get_vars = GetVars_Return;
-	vtable->get_name = GetName_Return;
+    vtable->get_name = GetName_Return;
     vtable->codegen  = CodeGen_Return;
     return node;
 }
 
 static void free_expression(const void *this) {
-    if (this == NULL) return;
-    const ASTNode *node = this;
+    if (this == NULL) {
+        return;
+    }
+    const ASTNode     *node = this;
     ASTExpressionData *data = node->data;
     data->exprs->free(data->exprs, free_ASTNode);
-    free_Expression(data->expr_node);
+    //free_Expression(data->expr_node);
     free(data->loc);
     free(node->data);
     free(node->vtable);
-    free((void*)node);
+    free((void *) node);
 }
 
 static void json_expression(const void *this, int indent, FILE *out) {
@@ -361,11 +392,14 @@ static void json_expression(const void *this, int indent, FILE *out) {
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
     fprintf(out, "\"type\": \"Expression\",\n");
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
-    const ASTNode *node = this;
+    const ASTNode     *node = this;
     ASTExpressionData *data = node->data;
-    fprintf(out, "\"loc\": \"%d:%d-%d:%d\",\n", data->loc->first_line,
-        data->loc->first_column, data->loc->last_line,
-        data->loc->last_column);
+    fprintf(out,
+            "\"loc\": \"%d:%d-%d:%d\",\n",
+            data->loc->first_line,
+            data->loc->first_column,
+            data->loc->last_line,
+            data->loc->last_column);
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
     fprintf(out, "\"exprs\": ");
     json_vector(data->exprs, indent, out, json_ASTNode);
@@ -392,7 +426,7 @@ const ASTNode *new_ExpressionNode(struct YYLTYPE *loc, const Vector *exprs) {
         return NULL;
     }
     node->vtable = vtable;
-    data->loc = malloc(sizeof(*loc));
+    data->loc    = malloc(sizeof(*loc));
     if (data->loc == NULL) {
         free(vtable);
         free(data);
@@ -400,28 +434,30 @@ const ASTNode *new_ExpressionNode(struct YYLTYPE *loc, const Vector *exprs) {
         return NULL;
     }
     memcpy(data->loc, loc, sizeof(*loc));
-    data->exprs = exprs;
-    data->type = NULL;
+    data->exprs      = exprs;
+    data->type       = NULL;
     data->expr_node  = NULL;
     vtable->free     = free_expression;
     vtable->json     = json_expression;
     vtable->get_type = GetType_Expression;
     vtable->get_vars = GetVars_Expression;
-	vtable->get_name = GetName_Expression;
+    vtable->get_name = GetName_Expression;
     vtable->codegen  = CodeGen_Expression;
     return node;
 }
 
 static void free_ref(const void *this) {
-    if (this == NULL) return;
+    if (this == NULL) {
+        return;
+    }
     const ASTNode *node = this;
-    ASTRefData *data = node->data;
+    ASTRefData    *data = node->data;
     free_VarType(data->type);
-    free_ASTNode((void*)data->expr);
+    free_ASTNode((void *) data->expr);
     free(data->loc);
     free(node->data);
     free(node->vtable);
-    free((void*)node);
+    free((void *) node);
 }
 
 static void json_ref(const void *this, int indent, FILE *out) {
@@ -431,10 +467,13 @@ static void json_ref(const void *this, int indent, FILE *out) {
     fprintf(out, "\"type\": \"Ref\",\n");
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
     const ASTNode *node = this;
-    ASTRefData *data = node->data;
-    fprintf(out, "\"loc\": \"%d:%d-%d:%d\"", data->loc->first_line,
-        data->loc->first_column, data->loc->last_line,
-        data->loc->last_column);
+    ASTRefData    *data = node->data;
+    fprintf(out,
+            "\"loc\": \"%d:%d-%d:%d\"",
+            data->loc->first_line,
+            data->loc->first_column,
+            data->loc->last_line,
+            data->loc->last_column);
     fprintf(out, "\n");
     indent--;
     fprintf(out, "%*s}", indent * JSON_TAB_WIDTH, "");
@@ -458,7 +497,7 @@ const ASTNode *new_RefNode(struct YYLTYPE *loc, const ASTNode *expr) {
         return NULL;
     }
     node->vtable = vtable;
-    data->loc = malloc(sizeof(*loc));
+    data->loc    = malloc(sizeof(*loc));
     if (data->loc == NULL) {
         free(vtable);
         free(data);
@@ -466,26 +505,28 @@ const ASTNode *new_RefNode(struct YYLTYPE *loc, const ASTNode *expr) {
         return NULL;
     }
     memcpy(data->loc, loc, sizeof(*loc));
-    data->type = NULL;
+    data->type       = NULL;
     data->expr       = expr;
     vtable->free     = free_ref;
     vtable->json     = json_ref;
     vtable->get_type = GetType_Ref;
     vtable->get_vars = GetVars_Ref;
-	vtable->get_name = GetName_Ref;
+    vtable->get_name = GetName_Ref;
     vtable->codegen  = CodeGen_Ref;
     return node;
 }
 
 static void free_paren(const void *this) {
-    if (this == NULL) return;
+    if (this == NULL) {
+        return;
+    }
     const ASTNode *node = this;
-    ASTParenData *data = node->data;
-    free_ASTNode((void*)data->val);
+    ASTParenData  *data = node->data;
+    free_ASTNode((void *) data->val);
     free(data->loc);
     free(node->data);
     free(node->vtable);
-    free((void*)node);
+    free((void *) node);
 }
 
 static void json_paren(const void *this, int indent, FILE *out) {
@@ -495,10 +536,13 @@ static void json_paren(const void *this, int indent, FILE *out) {
     fprintf(out, "\"type\": \"Paren\",\n");
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
     const ASTNode *node = this;
-    ASTParenData *data = node->data;
-    fprintf(out, "\"loc\": \"%d:%d-%d:%d\",\n", data->loc->first_line,
-        data->loc->first_column, data->loc->last_line,
-        data->loc->last_column);
+    ASTParenData  *data = node->data;
+    fprintf(out,
+            "\"loc\": \"%d:%d-%d:%d\",\n",
+            data->loc->first_line,
+            data->loc->first_column,
+            data->loc->last_line,
+            data->loc->last_column);
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
     fprintf(out, "\"value\": ");
     node = data->val;
@@ -526,7 +570,7 @@ const ASTNode *new_ParenNode(struct YYLTYPE *loc, const ASTNode *val) {
         return NULL;
     }
     node->vtable = vtable;
-    data->loc = malloc(sizeof(*loc));
+    data->loc    = malloc(sizeof(*loc));
     if (data->loc == NULL) {
         free(vtable);
         free(data);
@@ -540,21 +584,23 @@ const ASTNode *new_ParenNode(struct YYLTYPE *loc, const ASTNode *val) {
     vtable->json     = json_paren;
     vtable->get_type = GetType_Paren;
     vtable->get_vars = GetVars_Paren;
-	vtable->get_name = GetName_Paren;
+    vtable->get_name = GetName_Paren;
     vtable->codegen  = CodeGen_Paren;
     return node;
 }
 
 static void free_hold(const void *this) {
-    if (this == NULL) return;
+    if (this == NULL) {
+        return;
+    }
     const ASTNode *node = this;
-    ASTHoldData *data = node->data;
-    free_ASTNode((void*)data->val);
+    ASTHoldData   *data = node->data;
+    free_ASTNode((void *) data->val);
     free_VarType(data->type);
     free(data->loc);
     free(node->data);
     free(node->vtable);
-    free((void*)node);
+    free((void *) node);
 }
 
 static void json_hold(const void *this, int indent, FILE *out) {
@@ -564,9 +610,12 @@ static void json_hold(const void *this, int indent, FILE *out) {
     fprintf(out, "\"type\": \"Hold\",\n");
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
     const ASTNode *node = this;
-    ASTHoldData *data = node->data;
-    fprintf(out, "\"loc\": \"%d:%d-%d:%d\",\n", data->loc->first_line,
-            data->loc->first_column, data->loc->last_line,
+    ASTHoldData   *data = node->data;
+    fprintf(out,
+            "\"loc\": \"%d:%d-%d:%d\",\n",
+            data->loc->first_line,
+            data->loc->first_column,
+            data->loc->last_line,
             data->loc->last_column);
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
     fprintf(out, "\"value\": ");
@@ -595,7 +644,7 @@ const ASTNode *new_HoldNode(struct YYLTYPE *loc, const ASTNode *val) {
         return NULL;
     }
     node->vtable = vtable;
-    data->loc = malloc(sizeof(*loc));
+    data->loc    = malloc(sizeof(*loc));
     if (data->loc == NULL) {
         free(vtable);
         free(data);
@@ -609,28 +658,30 @@ const ASTNode *new_HoldNode(struct YYLTYPE *loc, const ASTNode *val) {
     vtable->json     = json_hold;
     vtable->get_type = GetType_Hold;
     vtable->get_vars = GetVars_Hold;
-	vtable->get_name = GetName_Hold;
+    vtable->get_name = GetName_Hold;
     vtable->codegen  = CodeGen_Hold;
     return node;
 }
 
 static void free_function(const void *this) {
-    if (this == NULL) return;
-    const ASTNode *node = this;
+    if (this == NULL) {
+        return;
+    }
+    const ASTNode   *node = this;
     ASTFunctionData *data = node->data;
     // data->type's function field points to data->signature. Freeing data->type
     // also frees data->signature.
     free_VarType(data->type);
     data->stmts->free(data->stmts, free_ASTNode);
-    data->symbols->free(data->symbols, free_VarType);
-    data->env->free(data->env, free_VarType);
-    data->args->free(data->args, NULL);
-    data->self->free(data->self, NULL);
+    if (data->symbols) data->symbols->free(data->symbols, free_VarType);
+    if (data->env) data->env->free(data->env, free_VarType);
+    if (data->args) data->args->free(data->args, NULL);
+    if (data->self) data->self->free(data->self, NULL);
     free(data->loc);
     free(node->data);
     free(node->vtable);
 
-    free((void*)node);
+    free((void *) node);
 }
 
 static void json_function(const void *this, int indent, FILE *out) {
@@ -639,11 +690,14 @@ static void json_function(const void *this, int indent, FILE *out) {
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
     fprintf(out, "\"type\": \"Function\",\n");
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
-    const ASTNode *node = this;
+    const ASTNode   *node = this;
     ASTFunctionData *data = node->data;
-    fprintf(out, "\"loc\": \"%d:%d-%d:%d\",\n", data->loc->first_line,
-        data->loc->first_column, data->loc->last_line,
-        data->loc->last_column);
+    fprintf(out,
+            "\"loc\": \"%d:%d-%d:%d\",\n",
+            data->loc->first_line,
+            data->loc->first_column,
+            data->loc->last_line,
+            data->loc->last_column);
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
     fprintf(out, "\"signature\": ");
     json_FuncType(data->signature, indent, out);
@@ -656,9 +710,9 @@ static void json_function(const void *this, int indent, FILE *out) {
     fprintf(out, "%*s}", indent * JSON_TAB_WIDTH, "");
 }
 
-const ASTNode *new_FunctionNode(struct YYLTYPE *loc,
-    FuncType *signature,
-    const Vector *stmts) {
+const ASTNode *new_FunctionNode(
+        struct YYLTYPE *loc, FuncType *signature, const Vector *stmts
+) {
     ASTNode *node = malloc(sizeof(*node));
     if (node == NULL) {
         return NULL;
@@ -676,7 +730,7 @@ const ASTNode *new_FunctionNode(struct YYLTYPE *loc,
         return NULL;
     }
     node->vtable = vtable;
-    data->loc = malloc(sizeof(*loc));
+    data->loc    = malloc(sizeof(*loc));
     if (data->loc == NULL) {
         free(vtable);
         free(data);
@@ -685,25 +739,27 @@ const ASTNode *new_FunctionNode(struct YYLTYPE *loc,
     }
     memcpy(data->loc, loc, sizeof(*loc));
     data->signature = signature;
-    data->stmts = stmts;
-    data->symbols = NULL;
-    data->env     = NULL;
-    data->args    = NULL;
-    data->self    = NULL;
+    data->stmts     = stmts;
+    data->symbols   = NULL;
+    data->env       = NULL;
+    data->args      = NULL;
+    data->self      = NULL;
     safe_function_call(new_VarType_from_FuncType, signature, &data->type);
-    vtable->free =     free_function;
-    vtable->json =     json_function;
+    vtable->free     = free_function;
+    vtable->json     = json_function;
     vtable->get_type = GetType_Function;
     vtable->get_vars = GetVars_Function;
-	vtable->get_name = GetName_Function;
+    vtable->get_name = GetName_Function;
     vtable->codegen  = CodeGen_Function;
     return node;
 }
 
 static void free_class(const void *this) {
-    if (this == NULL) return;
+    if (this == NULL) {
+        return;
+    }
     const ASTNode *node = this;
-    ASTClassData *data = node->data;
+    ASTClassData  *data = node->data;
     free_VarType(data->type);
     data->inheritance->free(data->inheritance, free);
     data->stmts->free(data->stmts, free_ASTNode);
@@ -713,7 +769,7 @@ static void free_class(const void *this) {
     free(data->loc);
     free(node->data);
     free(node->vtable);
-    free((void*)node);
+    free((void *) node);
 }
 
 static void json_class(const void *this, int indent, FILE *out) {
@@ -723,10 +779,13 @@ static void json_class(const void *this, int indent, FILE *out) {
     fprintf(out, "\"type\": \"Class\",\n");
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
     const ASTNode *node = this;
-    ASTClassData *data = node->data;
-    fprintf(out, "\"loc\": \"%d:%d-%d:%d\",\n", data->loc->first_line,
-        data->loc->first_column, data->loc->last_line,
-        data->loc->last_column);
+    ASTClassData  *data = node->data;
+    fprintf(out,
+            "\"loc\": \"%d:%d-%d:%d\",\n",
+            data->loc->first_line,
+            data->loc->first_column,
+            data->loc->last_line,
+            data->loc->last_column);
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
     fprintf(out, "\"extends\": ");
     json_vector(data->inheritance, indent, out, json_string);
@@ -739,9 +798,9 @@ static void json_class(const void *this, int indent, FILE *out) {
     fprintf(out, "%*s}", indent * JSON_TAB_WIDTH, "");
 }
 
-const ASTNode *new_ClassNode(struct YYLTYPE *loc,
-                             const Vector *inheritance,
-                             const Vector *stmts) {
+const ASTNode *new_ClassNode(
+        struct YYLTYPE *loc, const Vector *inheritance, const Vector *stmts
+) {
     ASTNode *node = malloc(sizeof(*node));
     if (node == NULL) {
         return NULL;
@@ -759,7 +818,7 @@ const ASTNode *new_ClassNode(struct YYLTYPE *loc,
         return NULL;
     }
     node->vtable = vtable;
-    data->loc = malloc(sizeof(*loc));
+    data->loc    = malloc(sizeof(*loc));
     if (data->loc == NULL) {
         free(vtable);
         free(data);
@@ -768,29 +827,31 @@ const ASTNode *new_ClassNode(struct YYLTYPE *loc,
     }
     memcpy(data->loc, loc, sizeof(*loc));
     data->inheritance = inheritance;
-    data->stmts = stmts;
-    data->symbols = new_Map(0, 0);
-    data->fields = new_Map(0, 0);
-    data->self = new_Map(0, 0);
-    data->type = NULL;
-    vtable->free     = free_class;
-    vtable->json     = json_class;
-    vtable->get_type = GetType_Class;
-    vtable->get_vars = GetVars_Class;
-	vtable->get_name = GetName_Class;
-    vtable->codegen  = CodeGen_Class;
+    data->stmts       = stmts;
+    data->symbols     = new_Map(0, 0);
+    data->fields      = new_Map(0, 0);
+    data->self        = new_Map(0, 0);
+    data->type        = NULL;
+    vtable->free      = free_class;
+    vtable->json      = json_class;
+    vtable->get_type  = GetType_Class;
+    vtable->get_vars  = GetVars_Class;
+    vtable->get_name  = GetName_Class;
+    vtable->codegen   = CodeGen_Class;
     return node;
 }
 
 static void free_variable(const void *this) {
-    if (this == NULL) return;
-    const ASTNode *node = this;
+    if (this == NULL) {
+        return;
+    }
+    const ASTNode   *node = this;
     ASTVariableData *data = node->data;
     free(data->name);
     free(data->loc);
     free(node->data);
     free(node->vtable);
-    free((void*)node);
+    free((void *) node);
 }
 
 static void json_variable(const void *this, int indent, FILE *out) {
@@ -799,11 +860,14 @@ static void json_variable(const void *this, int indent, FILE *out) {
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
     fprintf(out, "\"type\": \"Variable\",\n");
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
-    const ASTNode *node = this;
+    const ASTNode   *node = this;
     ASTVariableData *data = node->data;
-    fprintf(out, "\"loc\": \"%d:%d-%d:%d\",\n", data->loc->first_line,
-        data->loc->first_column, data->loc->last_line,
-        data->loc->last_column);
+    fprintf(out,
+            "\"loc\": \"%d:%d-%d:%d\",\n",
+            data->loc->first_line,
+            data->loc->first_column,
+            data->loc->last_line,
+            data->loc->last_column);
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
     fprintf(out, "\"name\": ");
     fprintf(out, "\"%s\"\n", data->name);
@@ -829,7 +893,7 @@ const ASTNode *new_VariableNode(struct YYLTYPE *loc, char *name) {
         return NULL;
     }
     node->vtable = vtable;
-    data->loc = malloc(sizeof(*loc));
+    data->loc    = malloc(sizeof(*loc));
     if (data->loc == NULL) {
         free(vtable);
         free(data);
@@ -837,8 +901,8 @@ const ASTNode *new_VariableNode(struct YYLTYPE *loc, char *name) {
         return NULL;
     }
     memcpy(data->loc, loc, sizeof(*loc));
-    data->name = name;
-    data->type = NULL;
+    data->name          = name;
+    data->type          = NULL;
     vtable->free        = free_variable;
     vtable->json        = json_variable;
     vtable->get_type    = GetType_Variable;
@@ -850,15 +914,17 @@ const ASTNode *new_VariableNode(struct YYLTYPE *loc, char *name) {
 }
 
 static void free_typed_var(const void *this) {
-    if (this == NULL) return;
-    const ASTNode *node = this;
+    if (this == NULL) {
+        return;
+    }
+    const ASTNode   *node = this;
     ASTTypedVarData *data = node->data;
     free(data->name);
     free_VarType(data->given_type);
     free(data->loc);
     free(node->data);
     free(node->vtable);
-    free((void*)node);
+    free((void *) node);
 }
 
 static void json_typed_var(const void *this, int indent, FILE *out) {
@@ -867,11 +933,14 @@ static void json_typed_var(const void *this, int indent, FILE *out) {
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
     fprintf(out, "\"type\": \"TypedVar\",\n");
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
-    const ASTNode *node = this;
+    const ASTNode   *node = this;
     ASTTypedVarData *data = node->data;
-    fprintf(out, "\"loc\": \"%d:%d-%d:%d\",\n", data->loc->first_line,
-        data->loc->first_column, data->loc->last_line,
-        data->loc->last_column);
+    fprintf(out,
+            "\"loc\": \"%d:%d-%d:%d\",\n",
+            data->loc->first_line,
+            data->loc->first_column,
+            data->loc->last_line,
+            data->loc->last_column);
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
     fprintf(out, "\"name\": ");
     fprintf(out, "\"%s\",\n", data->name);
@@ -883,9 +952,9 @@ static void json_typed_var(const void *this, int indent, FILE *out) {
     fprintf(out, "%*s}", indent * JSON_TAB_WIDTH, "");
 }
 
-const ASTNode *new_TypedVarNode(struct YYLTYPE *loc,
-                                char *name,
-                                VarType *type) {
+const ASTNode *new_TypedVarNode(
+        struct YYLTYPE *loc, char *name, VarType *type
+) {
     ASTNode *node = malloc(sizeof(*node));
     if (node == NULL) {
         return NULL;
@@ -903,7 +972,7 @@ const ASTNode *new_TypedVarNode(struct YYLTYPE *loc,
         return NULL;
     }
     node->vtable = vtable;
-    data->loc = malloc(sizeof(*loc));
+    data->loc    = malloc(sizeof(*loc));
     if (data->loc == NULL) {
         free(vtable);
         free(data);
@@ -911,28 +980,30 @@ const ASTNode *new_TypedVarNode(struct YYLTYPE *loc,
         return NULL;
     }
     memcpy(data->loc, loc, sizeof(*loc));
-    data->name = name;
-    data->given_type = type;
-    data->type = NULL;
+    data->name          = name;
+    data->given_type    = type;
+    data->type          = NULL;
     vtable->free        = free_typed_var;
     vtable->json        = json_typed_var;
     vtable->get_type    = GetType_TypedVar;
     vtable->get_vars    = GetVars_TypedVar;
-	vtable->get_name    = GetName_TypedVar;
+    vtable->get_name    = GetName_TypedVar;
     vtable->assign_type = AssignType_TypedVar;
     vtable->codegen     = CodeGen_TypedVar;
     return node;
 }
 
 static void free_int(const void *this) {
-    if (this == NULL) return;
+    if (this == NULL) {
+        return;
+    }
     const ASTNode *node = this;
-    ASTIntData *data = node->data;
+    ASTIntData    *data = node->data;
     free_VarType(data->type);
     free(data->loc);
     free(node->data);
     free(node->vtable);
-    free((void*)node);
+    free((void *) node);
 }
 
 static void json_int(const void *this, int indent, FILE *out) {
@@ -942,10 +1013,13 @@ static void json_int(const void *this, int indent, FILE *out) {
     fprintf(out, "\"type\": \"Int\",\n");
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
     const ASTNode *node = this;
-    ASTIntData *data = node->data;
-    fprintf(out, "\"loc\": \"%d:%d-%d:%d\",\n", data->loc->first_line,
-        data->loc->first_column, data->loc->last_line,
-        data->loc->last_column);
+    ASTIntData    *data = node->data;
+    fprintf(out,
+            "\"loc\": \"%d:%d-%d:%d\",\n",
+            data->loc->first_line,
+            data->loc->first_column,
+            data->loc->last_line,
+            data->loc->last_column);
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
     fprintf(out, "\"value\": ");
     fprintf(out, "\"%d\"\n", data->val);
@@ -971,7 +1045,7 @@ const ASTNode *new_IntNode(struct YYLTYPE *loc, int val) {
         return NULL;
     }
     node->vtable = vtable;
-    data->loc = malloc(sizeof(*loc));
+    data->loc    = malloc(sizeof(*loc));
     if (data->loc == NULL) {
         free(vtable);
         free(data);
@@ -982,24 +1056,26 @@ const ASTNode *new_IntNode(struct YYLTYPE *loc, int val) {
     data->val = val;
     safe_function_call(new_ObjectType, &data->type);
     data->type->object->classID = INT;
-    vtable->free        = free_int;
-    vtable->json        = json_int;
-    vtable->get_type    = GetType_Int;
-    vtable->get_vars    = GetVars_Int;
-	vtable->get_name    = GetName_Int;
-    vtable->codegen     = CodeGen_Int;
+    vtable->free                = free_int;
+    vtable->json                = json_int;
+    vtable->get_type            = GetType_Int;
+    vtable->get_vars            = GetVars_Int;
+    vtable->get_name            = GetName_Int;
+    vtable->codegen             = CodeGen_Int;
     return node;
 }
 
 static void free_double(const void *this) {
-    if (this == NULL) return;
+    if (this == NULL) {
+        return;
+    }
     const ASTNode *node = this;
-    ASTIntData *data = node->data;
+    ASTIntData    *data = node->data;
     free_VarType(data->type);
     free(data->loc);
     free(node->data);
     free(node->vtable);
-    free((void*)node);
+    free((void *) node);
 }
 
 static void json_double(const void *this, int indent, FILE *out) {
@@ -1010,9 +1086,12 @@ static void json_double(const void *this, int indent, FILE *out) {
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
     const ASTNode *node = this;
     ASTDoubleData *data = node->data;
-    fprintf(out, "\"loc\": \"%d:%d-%d:%d\",\n", data->loc->first_line,
-        data->loc->first_column, data->loc->last_line,
-        data->loc->last_column);
+    fprintf(out,
+            "\"loc\": \"%d:%d-%d:%d\",\n",
+            data->loc->first_line,
+            data->loc->first_column,
+            data->loc->last_line,
+            data->loc->last_column);
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
     fprintf(out, "\"value\": ");
     fprintf(out, "\"%f\"\n", data->val);
@@ -1038,7 +1117,7 @@ const ASTNode *new_DoubleNode(struct YYLTYPE *loc, double val) {
         return NULL;
     }
     node->vtable = vtable;
-    data->loc = malloc(sizeof(*loc));
+    data->loc    = malloc(sizeof(*loc));
     if (data->loc == NULL) {
         free(vtable);
         free(data);
@@ -1049,19 +1128,21 @@ const ASTNode *new_DoubleNode(struct YYLTYPE *loc, double val) {
     data->val = val;
     safe_function_call(new_ObjectType, &data->type);
     data->type->object->classID = DOUBLE;
-    vtable->free     = free_double;
-    vtable->json     = json_double;
-    vtable->get_type = GetType_Double;
-    vtable->get_vars = GetVars_Double;
-	vtable->get_name = GetName_Double;
-    vtable->codegen  = CodeGen_Double;
+    vtable->free                = free_double;
+    vtable->json                = json_double;
+    vtable->get_type            = GetType_Double;
+    vtable->get_vars            = GetVars_Double;
+    vtable->get_name            = GetName_Double;
+    vtable->codegen             = CodeGen_Double;
     return node;
 }
 
-static void json_vector(const Vector *vec,
-                        int indent,
-                        FILE *out,
-                        void(*element_json)(const void*, int, FILE*)) {
+static void json_vector(
+        const Vector *vec,
+        int indent,
+        FILE *out,
+        void(*element_json)(const void *, int, FILE *)
+) {
     char *sep = "\n";
     fprintf(out, "[");
     int size = vec->size(vec);
@@ -1071,7 +1152,9 @@ static void json_vector(const Vector *vec,
             fprintf(out, "%s", sep);
             fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
             const void *element = NULL;
-            if (vec->get(vec, i, &element)) return;
+            if (vec->get(vec, i, &element)) {
+                return;
+            }
             element_json(element, indent, out);
             sep = ",\n";
         }

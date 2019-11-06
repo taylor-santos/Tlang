@@ -87,7 +87,7 @@ int add_builtins(const Map *symbols, const Vector *class_defs) {
             safe_method_call(classType->fields, append, field);
             safe_method_call(classType->field_names,
                              put,
-                             strdup(field->name),
+                             field->name,
                              strlen(field->name),
                              NULL,
                              NULL);
@@ -97,14 +97,9 @@ int add_builtins(const Map *symbols, const Vector *class_defs) {
         safe_function_call(copy_VarType, class, &class_copy);
         char *name = NULL;
         safe_asprintf(&name, "var_%s", BUILTIN_NAMES[i]);
-        safe_method_call(symbols,
-                         put,
-                         name,
-                         strlen(name),
-                         class_copy,
-                         NULL);
+        safe_method_call(symbols, put, name, strlen(name), class_copy, NULL);
+        free(name);
     }
-
 
     const char *builtins[] = { "println" };
     n = sizeof(builtins) / sizeof(*builtins);
@@ -123,20 +118,18 @@ int add_builtins(const Map *symbols, const Vector *class_defs) {
         func_type->init = 1;
         char *name = NULL;
         safe_asprintf(&name, "var_%s", builtins[i]);
-        safe_method_call(symbols,
-                         put,
-                         name,
-                         strlen(name),
-                         func_type,
-                         NULL);
+        safe_method_call(symbols, put, name, strlen(name), func_type, NULL);
+        free(name);
     }
     return 0;
 }
 
 void free_VarType(void *this) {
-    if (this == NULL) return;
+    if (this == NULL) {
+        return;
+    }
     VarType *type = this;
-    switch(type->type) {
+    switch (type->type) {
         case FUNCTION:
             free_FuncType(type->function);
             break;
@@ -178,7 +171,6 @@ void free_ObjectType(void *this) {
     free(type->className);
     free(this);
 }
-
 
 void free_NamedType(void *this) {
     NamedType *arg = this;
@@ -285,9 +277,11 @@ int new_NamedArg(char *name, VarType *type, NamedType **namedarg_ptr) {
     (*namedarg_ptr)->name = name;
     (*namedarg_ptr)->type = type;
     return 0;
- }
+}
 
-int new_FuncType(const Vector *args, VarType *ret_type, FuncType **functype_ptr) {
+int new_FuncType(
+        const Vector *args, VarType *ret_type, FuncType **functype_ptr
+) {
     if (functype_ptr == NULL) {
         return 1;
     }
@@ -296,7 +290,7 @@ int new_FuncType(const Vector *args, VarType *ret_type, FuncType **functype_ptr)
         return 1;
     }
     (*functype_ptr)->named_args = args;
-    (*functype_ptr)->ret_type  = ret_type;
+    (*functype_ptr)->ret_type = ret_type;
     (*functype_ptr)->extension = NULL;
     return 0;
 }
@@ -347,23 +341,25 @@ void print_VarType(const void *this) {
                 if (type->class->classID < BUILTIN_COUNT) {
                     printf("val:%s}", BUILTIN_NAMES[type->class->classID]);
                 } else {*/
-                    if (type->class->isDef) {
-                        ClassType *class = type->class;
-                        NamedType **fields = NULL;
-                        size_t field_count;
-                        safe_method_call(class->fields, array, &field_count,
-                                         &fields);
-                        sep = "";
-                        for (size_t i = 0; i < field_count; i++) {
-                            printf("%s%s:", sep, fields[i]->name);
-                            print_VarType(fields[i]->type);
-                            sep = ",";
-                        }
-                        free(fields);
-                        printf("}");
-                    } else {
-                        printf("%ld}", type->class->classID);
+                if (type->class->isDef) {
+                    ClassType *class = type->class;
+                    NamedType **fields = NULL;
+                    size_t field_count;
+                    safe_method_call(class->fields,
+                                     array,
+                                     &field_count,
+                                     &fields);
+                    sep = "";
+                    for (size_t i = 0; i < field_count; i++) {
+                        printf("%s%s:", sep, fields[i]->name);
+                        print_VarType(fields[i]->type);
+                        sep = ",";
                     }
+                    free(fields);
+                    printf("}");
+                } else {
+                    printf("%ld}", type->class->classID);
+                }
                 //}
                 break;
             case OBJECT:
@@ -374,8 +370,8 @@ void print_VarType(const void *this) {
 }
 
 static int copy_VarType(const void *type, const void *copy_ptr) {
-    VarType *VT_type      = (VarType*)type;
-    VarType **VT_copy_ptr = (VarType**)copy_ptr;
+    VarType *VT_type = (VarType *) type;
+    VarType **VT_copy_ptr = (VarType **) copy_ptr;
     if (VT_copy_ptr == NULL) {
         return 1;
     }
@@ -390,35 +386,31 @@ static int copy_VarType(const void *type, const void *copy_ptr) {
     (*VT_copy_ptr)->type = VT_type->type;
     (*VT_copy_ptr)->is_ref = VT_type->is_ref;
     (*VT_copy_ptr)->init = VT_type->init;
-    switch(VT_type->type) {
-        case FUNCTION:
-            safe_function_call(copy_FuncType,
-                               VT_type->function,
-                               &(*VT_copy_ptr)->function);
+    switch (VT_type->type) {
+        case FUNCTION: safe_function_call(copy_FuncType,
+                                          VT_type->function,
+                                          &(*VT_copy_ptr)->function);
             break;
-        case OBJECT:
-            safe_function_call(copy_ObjectType,
-                               VT_type->object,
-                               &(*VT_copy_ptr)->object);
+        case OBJECT: safe_function_call(copy_ObjectType,
+                                        VT_type->object,
+                                        &(*VT_copy_ptr)->object);
             break;
-        case CLASS:
-            safe_function_call(copy_ClassType,
-                               VT_type->class,
-                               &(*VT_copy_ptr)->class);
+        case CLASS: safe_function_call(copy_ClassType,
+                                       VT_type->class,
+                                       &(*VT_copy_ptr)->class);
             break;
         case REFERENCE:
-        case HOLD:
-            safe_function_call(copy_VarType,
-                               VT_type->sub_type,
-                               &(*VT_copy_ptr)->sub_type);
+        case HOLD: safe_function_call(copy_VarType,
+                                      VT_type->sub_type,
+                                      &(*VT_copy_ptr)->sub_type);
             break;
     }
     return 0;
 }
 
 static int copy_NamedType(const void *this, const void *copy_ptr) {
-    NamedType *arg = (NamedType*)this;
-    NamedType **copy = (NamedType**)copy_ptr;
+    NamedType *arg = (NamedType *) this;
+    NamedType **copy = (NamedType **) copy_ptr;
     if (copy == NULL) {
         return 1;
     }
@@ -492,7 +484,7 @@ static int typecmp(const VarType *type1, const VarType *type2) {
         type1 = type1->sub_type;
     }
     if (type1->type == OBJECT && type2->type == CLASS) {
-        return (size_t)type1->object->classID != type2->class->classID;
+        return (size_t) type1->object->classID != type2->class->classID;
     }
     if (type1->type != type2->type) {
         return 1;
@@ -509,8 +501,11 @@ static int typecmp(const VarType *type1, const VarType *type2) {
         case HOLD:
             return 0;
     }
-    fprintf(stderr, "%s:%d: " RED "internal compiler error: " WHITE "switch "
-            "statement failed to cover all cases\n", __FILE__, __LINE__);
+    fprintf(stderr,
+            "%s:%d: " RED "internal compiler error: " WHITE "switch "
+            "statement failed to cover all cases\n",
+            __FILE__,
+            __LINE__);
     return 1;
 }
 
@@ -536,15 +531,14 @@ static int funccmp(const FuncType *type1, const FuncType *type2) {
 }
 
 int TypeCheck_Program(const void *this) {
-    const ASTNode  *node  = this;
-    ASTProgramData *data  = node->data;
-    const Vector   *stmts = data->statements;
-    TypeCheckState state = {
-            .assigned_vars = new_Vector(0),
-            .new_symbols = new_Vector(0),
-            .program_node = this,
-            .curr_ret_type = NULL
-    };
+    const ASTNode *node = this;
+    ASTProgramData *data = node->data;
+    const Vector *stmts = data->statements;
+    TypeCheckState state;
+    state.assigned_vars = new_Vector(0);
+    state.new_symbols = new_Vector(0);
+    state.program_node = this;
+    state.curr_ret_type = NULL;
     size_t size = 0;
     ASTNode **stmt_arr = NULL;
     safe_method_call(stmts, array, &size, &stmt_arr);
@@ -561,14 +555,16 @@ int TypeCheck_Program(const void *this) {
     return errstate;
 }
 
-int GetType_Assignment(const void *this,
-                       const Map *symbols,
-                       void *typecheck_state,
-                       VarType **type_ptr) {
+int GetType_Assignment(
+        const void *this,
+        const Map *symbols,
+        void *typecheck_state,
+        VarType **type_ptr
+) {
     if (type_ptr == NULL) {
         return 1;
     }
-    const ASTNode     *node = this;
+    const ASTNode *node = this;
     ASTAssignmentData *data = node->data;
     const ASTNode *lhs = data->lhs;
     const ASTNode *rhs = data->rhs;
@@ -597,10 +593,12 @@ int GetType_Assignment(const void *this,
     return 0;
 }
 
-int GetType_Def(const void *this,
-                const Map *symbols,
-                void *typecheck_state,
-                VarType **type_ptr) {
+int GetType_Def(
+        const void *this,
+        const Map *symbols,
+        void *typecheck_state,
+        VarType **type_ptr
+) {
     if (type_ptr == NULL) {
         return 1;
     }
@@ -662,10 +660,12 @@ int GetType_Def(const void *this,
     return 0;
 }
 
-int GetType_Return(UNUSED const void *this,
-                   UNUSED const Map *symbols,
-                   void *typecheck_state,
-                   VarType **type_ptr) {
+int GetType_Return(
+        UNUSED const void *this,
+        UNUSED const Map *symbols,
+        void *typecheck_state,
+        VarType **type_ptr
+) {
     if (type_ptr == NULL) {
         return 1;
     }
@@ -676,13 +676,10 @@ int GetType_Return(UNUSED const void *this,
     VarType *ret_type = NULL;
     if (ret_expr != NULL) {
         ASTRExprVTable *ret_vtable = ret_expr->vtable;
-        if (ret_vtable->get_type(ret_expr,
-                                 symbols,
-                                 typecheck_state,
-                                 &ret_type)) {
+        if (ret_vtable->get_type(ret_expr, symbols, typecheck_state,
+                &ret_type)) {
             //TODO: Handle failed to infer type of returned value
-            fprintf(stderr,
-                    "error: failed to infer type of returned value\n");
+            fprintf(stderr, "error: failed to infer type of returned value\n");
             return 1;
         } else {
             safe_function_call(copy_VarType, ret_type, &data->type);
@@ -692,7 +689,9 @@ int GetType_Return(UNUSED const void *this,
         data->type = NULL;
         *type_ptr = NULL;
     }
-    if (typecmp(*type_ptr, state->curr_ret_type)) {
+    if (state->curr_ret_type == NULL) {
+        state->curr_ret_type = *type_ptr;
+    } else if (typecmp(*type_ptr, state->curr_ret_type)) {
         //TODO: Handle incompatible return statement
         fprintf(stderr, "error: incompatible return type\n");
         return 1;
@@ -700,13 +699,15 @@ int GetType_Return(UNUSED const void *this,
     return 0;
 }
 
-int parse_expression(const ASTNode **nodes,
-                          size_t *index,
-                          size_t size,
-                          const Map *symbols,
-                          void *typecheck_state,
-                          VarType **type_ptr,
-                          Expression **expr_ptr) {
+int parse_expression(
+        const ASTNode **nodes,
+        size_t *index,
+        size_t size,
+        const Map *symbols,
+        void *typecheck_state,
+        VarType **type_ptr,
+        Expression **expr_ptr
+) {
     VarType *node_type = NULL;
     {
         const ASTNode *node = nodes[*index];
@@ -749,8 +750,7 @@ int parse_expression(const ASTNode **nodes,
         }
     }
     (*index)++;
-
-    switch(node_type->type) {
+    switch (node_type->type) {
         case FUNCTION:;
             FuncType *function = node_type->function;
             NamedType **args = NULL;
@@ -893,40 +893,45 @@ int parse_expression(const ASTNode **nodes,
      */
 }
 
-int GetType_Expression(const void *this,
-                       const Map *symbols,
-                       void *typecheck_state,
-                       VarType **type_ptr) {
+int GetType_Expression(
+        const void *this,
+        const Map *symbols,
+        void *typecheck_state,
+        VarType **type_ptr
+) {
     if (type_ptr == NULL) {
         return 1;
     }
-    const ASTNode     *node   = this;
-    ASTExpressionData *data   = node->data;
-    const Vector      *exprs  = data->exprs;
-    const ASTNode     **nodes = NULL;
-    Expression        *expr;
+    const ASTNode *node = this;
+    ASTExpressionData *data = node->data;
+    const Vector *exprs = data->exprs;
+    const ASTNode **nodes = NULL;
+    Expression *expr;
 
     size_t size = exprs->size(exprs);
     safe_method_call(exprs, array, &size, &nodes);
     size_t index = 0;
-    safe_function_call(parse_expression,
-                       nodes,
-                       &index,
-                       size,
-                       symbols,
-                       typecheck_state,
-                       type_ptr,
-                       &expr);
+    if (parse_expression(nodes,
+                         &index,
+                         size,
+                         symbols,
+                         typecheck_state,
+                         type_ptr,
+                         &expr)) {
+        return 1;
+    }
     data->expr_node = expr;
     data->type = *type_ptr;
     free(nodes);
     return 0;
 }
 
-int GetType_Ref(const void *this,
-                UNUSED const Map *symbols,
-                void *typecheck_state,
-                VarType **type_ptr) {
+int GetType_Ref(
+        const void *this,
+        UNUSED const Map *symbols,
+        void *typecheck_state,
+        VarType **type_ptr
+) {
     const ASTNode *node;
     ASTRefData *data;
     ASTStatementVTable *vtable;
@@ -953,25 +958,30 @@ int GetType_Ref(const void *this,
     return 0;
 }
 
-int GetType_Paren(const void *this,
-                  UNUSED const Map *symbols,
-                  void *typecheck_state,
-                  VarType **type_ptr) {
+int GetType_Paren(
+        const void *this,
+        UNUSED const Map *symbols,
+        void *typecheck_state,
+        VarType **type_ptr
+) {
     if (type_ptr == NULL) {
         return 1;
     }
-    const ASTNode      *node   = this;
-    ASTParenData       *data   = node->data;
+    const ASTNode *node = this;
+    ASTParenData *data = node->data;
     ASTStatementVTable *vtable = data->val->vtable;
-    int result =  vtable->get_type(data->val, symbols, typecheck_state, type_ptr);
+    int result =
+            vtable->get_type(data->val, symbols, typecheck_state, type_ptr);
     data->type = *type_ptr;
     return result;
 }
 
-int GetType_Hold(const void *this,
-                UNUSED const Map *symbols,
-                void *typecheck_state,
-                VarType **type_ptr) {
+int GetType_Hold(
+        const void *this,
+        UNUSED const Map *symbols,
+        void *typecheck_state,
+        VarType **type_ptr
+) {
     const ASTNode *node;
     ASTHoldData *data;
     ASTStatementVTable *vtable;
@@ -993,14 +1003,16 @@ int GetType_Hold(const void *this,
     return 0;
 }
 
-int GetType_Variable(const void *this,
-                     const Map *symbols,
-                     UNUSED void *typecheck_state,
-                     VarType **type_ptr) {
+int GetType_Variable(
+        const void *this,
+        const Map *symbols,
+        UNUSED void *typecheck_state,
+        VarType **type_ptr
+) {
     if (type_ptr == NULL) {
         return 1;
     }
-    const ASTNode   *node = this;
+    const ASTNode *node = this;
     ASTVariableData *data = node->data;
     size_t len = strlen(data->name);
     VarType *type = NULL;
@@ -1022,14 +1034,16 @@ int GetType_Variable(const void *this,
     }
 }
 
-int GetType_TypedVar(const void *this,
-                     const Map *symbols,
-                     void *typecheck_state,
-                     VarType **type_ptr) {
+int GetType_TypedVar(
+        const void *this,
+        const Map *symbols,
+        void *typecheck_state,
+        VarType **type_ptr
+) {
     if (type_ptr == NULL) {
         return 1;
     }
-    const ASTNode   *node = this;
+    const ASTNode *node = this;
     ASTTypedVarData *data = node->data;
     size_t len = strlen(data->name);
     if (data->given_type->type == OBJECT) {
@@ -1063,10 +1077,12 @@ int GetType_TypedVar(const void *this,
     return 0;
 }
 
-int GetType_Int(UNUSED const void *this,
-                UNUSED const Map *symbols,
-                UNUSED void *typecheck_state,
-                VarType **type_ptr) {
+int GetType_Int(
+        UNUSED const void *this,
+        UNUSED const Map *symbols,
+        UNUSED void *typecheck_state,
+        VarType **type_ptr
+) {
     if (type_ptr == NULL) {
         return 1;
     }
@@ -1076,10 +1092,12 @@ int GetType_Int(UNUSED const void *this,
     return 0;
 }
 
-int GetType_Double(UNUSED const void *this,
-                   UNUSED const Map *symbols,
-                   UNUSED void *typecheck_state,
-                   VarType **type_ptr) {
+int GetType_Double(
+        UNUSED const void *this,
+        UNUSED const Map *symbols,
+        UNUSED void *typecheck_state,
+        VarType **type_ptr
+) {
     if (type_ptr == NULL) {
         return 1;
     }
@@ -1089,10 +1107,12 @@ int GetType_Double(UNUSED const void *this,
     return 0;
 }
 
-int GetType_Function(const void *this,
-                     const Map *symbols,
-                     void *typecheck_state,
-                     VarType **type_ptr) {
+int GetType_Function(
+        const void *this,
+        const Map *symbols,
+        void *typecheck_state,
+        VarType **type_ptr
+) {
     if (type_ptr == NULL) {
         return 1;
     }
@@ -1124,8 +1144,8 @@ int GetType_Function(const void *this,
         if (extension->type->type == OBJECT) {
             if (getObjectID(extension->type->object, symbols)) {
                 //TODO: Handle invalid extension type
-                fprintf(stderr,"error: unrecognized type name in function "
-                               "extension\n");
+                fprintf(stderr, "error: unrecognized type name in function"
+                                "extension\n");
                 return 1;
             }
         }
@@ -1162,8 +1182,8 @@ int GetType_Function(const void *this,
         if (args[i]->type->type == OBJECT) {
             if (getObjectID(args[i]->type->object, symbols)) {
                 //TODO: Handle invalid argument type
-                fprintf(stderr,"error: unrecognized type name in function "
-                               "argument\n");
+                fprintf(stderr, "error: unrecognized type name in function "
+                                "argument\n");
                 return 1;
             }
         }
@@ -1201,43 +1221,60 @@ int GetType_Function(const void *this,
     ASTNode **stmt_arr = NULL;
     safe_method_call(data->stmts, array, &stmt_count, &stmt_arr);
     VarType *prev_ret_type = state->curr_ret_type;
-    state->curr_ret_type = signature->ret_type;
-    int err = 0;
+    state->curr_ret_type = NULL;
     for (size_t i = 0; i < stmt_count; i++) {
         ASTStatementVTable *vtable = stmt_arr[i]->vtable;
         VarType *type = NULL;
-        err = vtable->get_type(stmt_arr[i], data->symbols, typecheck_state, &type)
-              || err;
+        if (vtable->get_type(stmt_arr[i],
+                             data->symbols,
+                             typecheck_state,
+                             &type)) {
+            return 1;
+        }
     }
-    free(stmt_arr);
+    if (state->curr_ret_type == NULL) {
+        if (data->signature->ret_type != NULL) {
+            //TODO: Handle not all code paths return a value
+            fprintf(stderr, "error: not all code paths return a value\n");
+            return 1;
+        }
+    } else {
+        if (data->signature->ret_type != NULL) {
+            if (typecmp(data->signature->ret_type, state->curr_ret_type)) {
+                //TODO: Handle incompatible return type
+                fprintf(stderr, "error: returned value has incompatible type "
+                                "to function signature\n");
+                return 1;
+            }
+        } else {
+            safe_function_call(copy_VarType, state->curr_ret_type,
+                    &data->signature->ret_type);
+        }
+    }
     state->curr_ret_type = prev_ret_type;
-    if (err) return 1;
     *type_ptr = data->type;
     const ASTNode *program_ast = state->program_node;
-	ASTProgramData *program_data = program_ast->data;
-	int *n = malloc(sizeof(int));
-	if (n == NULL) {
-	    print_ICE("unable to allocate memory");
-	}
-	*n = program_data->func_defs->size(program_data->func_defs);
-    safe_method_call(program_data->func_defs,
-                     put,
-                     this,
-                     sizeof(this),
-                     n,
-                     NULL);
+    ASTProgramData *program_data = program_ast->data;
+    int *n = malloc(sizeof(int));
+    if (n == NULL) {
+        print_ICE("unable to allocate memory");
+    }
+    *n = program_data->func_defs->size(program_data->func_defs);
+    safe_method_call(program_data->func_defs, put, this, sizeof(this), n, NULL);
     return 0;
 }
 
-int GetType_Class(const void *this,
-                  const Map *symbols,
-                  void *typecheck_state,
-                  VarType **type_ptr) {
+int GetType_Class(
+        const void *this,
+        const Map *symbols,
+        void *typecheck_state,
+        VarType **type_ptr
+) {
     if (type_ptr == NULL) {
         return 1;
     }
     const ASTNode *node = this;
-    ASTClassData  *data = node->data;
+    ASTClassData *data = node->data;
 
     TypeCheckState *state = typecheck_state;
     for (size_t i = 0;
@@ -1259,13 +1296,10 @@ int GetType_Class(const void *this,
     safe_method_call(data->inheritance, array, &parent_count, &parents);
     for (size_t i = 0; i < parent_count; i++) {
         VarType *parent_type = NULL;
-        if (symbols->get(symbols,
-                         parents[i],
-                         strlen(parents[i]),
-                         &parent_type)) {
+        if (symbols
+                ->get(symbols, parents[i], strlen(parents[i]), &parent_type)) {
             //TODO: handle inheritance from unrecognized type
-            fprintf(stderr,
-                    "error: class inherits from unrecognized type\n");
+            fprintf(stderr, "error: class inherits from unrecognized type\n");
             return 1;
         }
         if (parent_type->type != CLASS) {
@@ -1290,7 +1324,7 @@ int GetType_Class(const void *this,
         }
     }
     free(parents);
-    const Vector  *stmts = data->stmts;
+    const Vector *stmts = data->stmts;
     size_t size = 0;
     ASTNode **stmt_arr = NULL;
     safe_method_call(stmts, array, &size, &stmt_arr);
@@ -1303,8 +1337,7 @@ int GetType_Class(const void *this,
         errstate = vtable->get_type(stmt_arr[i],
                                     data->symbols,
                                     typecheck_state,
-                                    &type)
-                   || errstate;
+                                    &type) || errstate;
     }
     free(stmt_arr);
     size_t num_fields = state->new_symbols->size(state->new_symbols);
@@ -1328,7 +1361,7 @@ int GetType_Class(const void *this,
 }
 
 int AssignType_Variable(const void *this, VarType *type, const Map *symbols) {
-    const ASTNode   *node = this;
+    const ASTNode *node = this;
     ASTVariableData *data = node->data;
     size_t len = strlen(data->name);
     VarType *put_type = NULL;
@@ -1348,7 +1381,7 @@ int AssignType_Variable(const void *this, VarType *type, const Map *symbols) {
 }
 
 int AssignType_TypedVar(const void *this, VarType *type, const Map *symbols) {
-    const ASTNode   *node = this;
+    const ASTNode *node = this;
     ASTTypedVarData *data = node->data;
     size_t len = strlen(data->name);
     VarType *put_type = NULL;
@@ -1450,7 +1483,9 @@ int GetVars_Variable(const void *this, const Vector *vars) {
 }
 
 int GetName_Variable(const void *this, char **name_ptr) {
-    if (name_ptr == NULL) return 1;
+    if (name_ptr == NULL) {
+        return 1;
+    }
     const ASTNode *node = this;
     ASTVariableData *data = node->data;
     *name_ptr = data->name;
