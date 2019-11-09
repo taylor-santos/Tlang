@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <getopt.h> // getopt()
+#include <time.h>
 #include "Tlang_parser.h"
 #include "Tlang_scanner.h"
 #include "ast.h"
@@ -97,9 +98,8 @@ int main(int argc, char *argv[]) {
             status = 1;
         } else {
             ASTProgramVTable *vtable = AST->vtable;
-            vtable->json(AST, 0, stdout);
-            printf("\n");
-            /*
+            //vtable->json(AST, 0, stdout);
+            //printf("\n");
             if (!vtable->type_check(AST)) {
                 ASTProgramData *data = AST->data;
                 print_Map(data->symbols, print_VarType);
@@ -108,11 +108,10 @@ int main(int argc, char *argv[]) {
                 } else {
                     printf("Code generation failed!\n");
                 }
-                 *//*
+                 */
             } else {
                 printf("Type checker failed!\n");
             }
-            */
             vtable->free(AST);
         }
 

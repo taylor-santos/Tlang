@@ -50,311 +50,389 @@
     char      *str_val;
     ASTNode   const *ast;
     Vector    const *vec;
-    VarType   *var_type;
-    NamedType *named_arg;
-    FuncType  *func_type;
+    VarType   *type;
 }
 
-%token             T_INDENT T_OUTDENT T_ERROR T_NEWLINE T_FUNC T_RETURN T_REF
-                   T_ARROW T_CLASS T_DEFINE
-%token<int_val>    T_INT
-%token<double_val> T_DOUBLE
-%token<str_val>    T_IDENT
+%token T_INDENT    "indent"
+%token T_OUTDENT   "outdent"
+%token T_ERROR     "error"
+%token T_NEWLINE   "line break"
+%token T_FUNC      "func"
+%token T_RETURN    "return"
+%token T_REF       "ref"
+%token T_HOLD      "!"
+%token T_ARROW     "->"
+%token T_CLASS     "class"
+%token T_DEFINE    ":="
+%token END 0       "end of file"
+%token<int_val>    T_INT "integer"
+%token<double_val> T_DOUBLE "double"
+%token<str_val>    T_IDENT "identifier"
 
-%type<ast>       file statement l_value r_expr sub_expr expression func_block
-                 return
-%type<vec>       stmts opt_args args opt_named_args named_args call_list
-                 return_stmts
-%type<var_type>  type_def opt_return_type type
-%type<func_type> func_def named_func_def
-%type<named_arg> named_type_def opt_extension opt_named_extension
 
-%start file
+%type<ast>  File Return Statement Variable Expression SubExpr Value
+            FuncBlock ClassBlock
+%type<vec>  Statements ReturnStatements OneLineStatements
+            OneLineReturnStatements OptRefExpr ExprChain OptTypes Tuple
+            OptArgTypes
+            OptNameArgs NameArgs TypesList TypeTuple
+%type<type> FuncType OptType Type TypeDef
+
+%start File
 
 %%
 
-file:
+File:
     %empty
-        {
-            *root = new_ProgramNode(&@$, 0);
-        }
-  | stmts
-        {
-            *root = new_ProgramNode(&@$, $1);
-        }
+    {
+        *root = new_ProgramNode(&@$, NULL);
+    }
+  | Statements
+    {
+        *root = new_ProgramNode(&@$, $1);
+    }
 
-stmts:
-    statement T_NEWLINE
-        {
-            $$ = new_Vector(0);
-            safe_method_call($$, append, $1);
-        }
-  | stmts statement T_NEWLINE
-        {
-            $$ = $1;
-            safe_method_call($$, append, $2);
-        }
+Statements:
+    Statement T_NEWLINE
+    {
+        $$ = new_Vector(0);
+        $$->append($$, $1);
+    }
+  | OneLineStatements Statement T_NEWLINE
+    {
+        $$ = $1;
+        $$->append($$, $2);
+    }
+  | Statements Statement T_NEWLINE
+    {
+        $$ = $1;
+        $$->append($$, $2);
+    }
 
-return_stmts:
-    stmts statement
-        {
-            $1->append($1, $2);
-            $$ = $1;
-        }
-  | return
-        {
-            $$ = new_Vector(0);
-            $$->append($$, $1);
-        }
-  | stmts return
-        {
-            $1->append($1, $2);
-            $$ = $1;
-        }
+ReturnStatements:
+    Statements
+    {
+        $$ = $1;
+    }
+  | Return T_NEWLINE
+    {
+        $$ = new_Vector(0);
+        $$->append($$, $1);
+    }
+  | Statements Return T_NEWLINE
+    {
+        $$ = $1;
+        $$->append($$, $2);
+    }
 
-return:
-    T_RETURN expression
-        {
-            $$ = new_ReturnNode(&@$, $2);
-        }
-  | T_RETURN
-        {
-            $$ = new_ReturnNode(&@$, NULL);
-        }
+OneLineStatements:
+    Statement ';'
+    {
+        $$ = new_Vector(0);
+        $$->append($$, $1);
+    }
+  | OneLineStatements Statement ';'
+    {
+        $$ = $1;
+        $$->append($$, $2);
+    }
 
-statement:
-    T_IDENT ':' type_def
-        {
-            $$ = new_TypedVarNode(&@$, $1, $3);
-        }
-  | expression
-        {
-            $$ = $1;
-        }
+OneLineReturnStatements:
+    Statement
+    {
+        $$ = new_Vector(0);
+        $$->append($$, $1);
+    }
+  | Return
+    {
+        $$ = new_Vector(0);
+        $$->append($$, $1);
+    }
+  | OneLineStatements Statement
+    {
+        $$ = $1;
+        $$->append($$, $2);
+    }
+  | OneLineStatements Return
+    {
+        $$ = $1;
+        $$->append($$, $2);
+    }
 
-expression:
-    call_list
-        {
-            $$ = new_ExpressionNode(&@$, $1);
-        }
-  | func_block
-        {
-            $$ = $1;
-        }
-  | l_value T_DEFINE expression
-        {
-            $$ = new_DefNode(&@$, $1, $3);
-        }
-  | call_list '=' expression
-        {
-            const ASTNode *lhs = new_ExpressionNode(&@$, $1);
-            $$ = new_AssignmentNode(&@$, lhs, $3);
-        }
+Return:
+    T_RETURN
+    {
+        $$ = new_ReturnNode(&@$, NULL);
+    }
+  | T_RETURN Expression
+    {
+        $$ = new_ReturnNode(&@$, $2);
+    }
 
-func_block:
-    opt_named_extension named_func_def return_stmts
-        {
-            $2->extension = $1;
-            $$ = new_FunctionNode(&@$, $2, $3);
-        }
-  | opt_named_extension named_func_def T_NEWLINE T_INDENT return_stmts T_NEWLINE T_OUTDENT
-        {
-            $2->extension = $1;
-            $$ = new_FunctionNode(&@$, $2, $5);
-        }
+Statement:
+    Expression
+    {
+        $$ = $1;
+    }
+  | Variable T_DEFINE Expression
+    {
+        $$ = new_DefNode(&@$, $1, $3);
+    }
 
-call_list:
-    sub_expr
-        {
-            $$ = new_Vector(0);
-            safe_method_call($$, append, $1);
-        }
-  | call_list sub_expr
-        {
-            $$ = $1;
-            safe_method_call($$, append, $2);
-        }
-
-sub_expr:
-    r_expr
-        {
-            $$ = $1;
-        }
-  | '(' call_list ')'
-        {
-            $$ = new_ParenNode(&@$, new_ExpressionNode(&@2, $2));
-        }
-  | T_REF sub_expr
-        {
-            const Vector *v = new_Vector(0);
-            safe_method_call(v, append, $2);
-            $$ = new_RefNode(&@$, new_ExpressionNode(&@2, v));
-        }
-  | '[' l_value ']'
-        {
-            $$ = new_HoldNode(&@$, $2);
-        }
-  | '(' func_block ')'
-        {
-            $$ = $2;
-        }
-
-l_value:
+Variable:
     T_IDENT
-        {
-            $$ = new_VariableNode(&@$, $1);
-        }
+    {
+        $$ = new_VariableNode(&@$, $1);
+    }
+  | T_IDENT ':' Type
+    {
+        $$ = new_TypedVarNode(&@$, $1, $3);
+    }
 
-type_def:
-    type
-        {
-            $$ = $1;
-        }
-  | T_REF type
-        {
-            $2->is_ref = 1;
-            $$ = $2;
-        }
+Expression:
+    OptRefExpr
+    {
+        $$ = new_ExpressionNode(&@$, $1);
+    }
+  | OptRefExpr T_HOLD
+    {
+        $1->append($1, new_HoldNode(&@2));
+        $$ = new_ExpressionNode(&@$, $1);
+    }
+  | FuncBlock
+    {
+        $$ = $1;
+    }
+  | ClassBlock
+    {
+        $$ = $1;
+    }
 
-type:
+OptRefExpr:
+    ExprChain
+    {
+        $$ = $1;
+    }
+  | T_REF SubExpr
+    {
+        $$ = new_Vector(0);
+        $$->append($$, new_RefNode(&@1, $2));
+    }
+  | ExprChain T_REF SubExpr
+    {
+        $$ = $1;
+        $$->append($$, new_RefNode(&@2, $3));
+    }
+
+ExprChain:
+    SubExpr
+    {
+        $$ = new_Vector(0);
+        $$->append($$, $1);
+    }
+  | ExprChain SubExpr
+    {
+        $$ = $1;
+        $$->append($$, $2);
+    }
+
+SubExpr:
+    Value
+    {
+        $$ = $1;
+    }
+  | '(' Tuple ')'
+    {
+        $$ = new_TupleNode(&@$, $2);
+    }
+  | '(' Expression ')'
+    {
+        $$ = new_ParenNode(&@$, $2);
+    }
+
+Value:
     T_IDENT
-        {
-            safe_function_call(new_ObjectType, &$$);
-            $$->object->className = $1;
-        }
-  | func_def
-        {
-            safe_function_call(new_VarType_from_FuncType, $1, &$$);
-        }
-        
-named_func_def:
-    T_FUNC opt_named_args opt_return_type T_ARROW
-        {
-            safe_function_call(new_FuncType, $2, $3, &$$);
-        }
-
-func_def:
-    opt_extension T_FUNC opt_args opt_return_type
-        {
-            safe_function_call(new_FuncType, $3, $4, &$$);
-            $$->extension = $1;
-        }
-
-opt_extension:
-    %empty
-        {
-            $$ = NULL;
-        }
-  | '(' type_def ')'
-        {
-            safe_function_call(new_NamedArg, NULL, $2, &$$);
-        }
-
-opt_args:
-    %empty
-        {
-            $$ = new_Vector(0);
-        }
-  | '(' ')'
-        {
-            $$ = new_Vector(0);
-        }
-  | '(' args ')'
-        {
-            $$ = $2;
-        }
-
-args:
-    type_def
-        {
-            $$ = new_Vector(0);
-            NamedType *arg = NULL;
-            safe_function_call(new_NamedArg, NULL, $1, &arg);
-            safe_method_call($$, append, arg);
-        }
-  | named_type_def
-        {
-            $$ = new_Vector(0);
-            safe_method_call($$, append, $1);
-        }
-  | args ',' type_def
-        {
-            $$ = $1;
-            NamedType *arg = NULL;
-            safe_function_call(new_NamedArg, NULL, $3, &arg);
-            safe_method_call($$, append, arg);
-        }
-  | args ',' named_type_def
-          {
-              $$ = $1;
-              safe_method_call($$, append, $3);
-          }
-
-opt_return_type:
-    %empty
-        {
-            $$ = NULL;
-        }
-  | ':' type_def
-        {
-            $$ = $2;
-        }
-
-r_expr:
-    l_value
-        {
-            $$ = $1;
-        }
+    {
+        $$ = new_VariableNode(&@$, $1);
+    }
   | T_INT
-        {
-            $$ = new_IntNode(&@$, $1);
-        }
+    {
+        $$ = new_IntNode(&@$, $1);
+    }
   | T_DOUBLE
-        {
-            $$ = new_DoubleNode(&@$, $1);
-        }
+    {
+        $$ = new_DoubleNode(&@$, $1);
+    }
 
-opt_named_extension:
-    %empty
-        {
-            $$ = NULL;
-        }
-  | '(' T_IDENT ':' type_def ')'
-        {
-            safe_function_call(new_NamedArg, $2, $4, &$$);
-        }
+FuncType:
+    T_FUNC OptArgTypes OptType
+    {
+        new_FuncType($2, $3, &$$);
+    }
 
-opt_named_args:
+FuncBlock:
+    T_FUNC OptNameArgs OptType T_NEWLINE T_INDENT ReturnStatements T_OUTDENT
+    {
+        VarType *signature = NULL;
+        new_FuncType($2, $3, &signature);
+        $$ = new_FunctionNode(&@$, signature, $6);
+    }
+  | T_FUNC OptNameArgs OptType '{' OneLineReturnStatements '}'
+    {
+        VarType *signature = NULL;
+        new_FuncType($2, $3, &signature);
+        $$ = new_FunctionNode(&@$, signature, $5);
+    }
+  | T_FUNC OptNameArgs OptType T_ARROW Expression
+    {
+        VarType *signature = NULL;
+        new_FuncType($2, $3, &signature);
+        const Vector *statements = new_Vector(0);
+        const ASTNode *ret = new_ReturnNode(&@5, $5);
+        statements->append(statements, ret);
+        $$ = new_FunctionNode(&@$, signature, statements);
+    }
+
+ClassBlock:
+    T_CLASS OptTypes T_NEWLINE T_INDENT Statements T_OUTDENT
+    {
+        $$ = new_ClassNode(&@$, $2, $5);
+    }
+
+OptTypes:
     %empty
-        {
-            $$ = new_Vector(0);
-        }
+    {
+        $$ = new_Vector(0);
+    }
+  | ':' TypesList
+    {
+        $$ = $2;
+    }
+
+Tuple:
+    ExprChain ',' ExprChain
+    {
+        $$ = new_Vector(0);
+        $$->append($$, new_ExpressionNode(&@$, $1));
+        $$->append($$, new_ExpressionNode(&@$, $3));
+    }
+  | Tuple ',' ExprChain
+    {
+        $$ = $1;
+        const ASTNode *expr = new_ExpressionNode(&@3, $3);
+        $$->append($$, expr);
+    }
+
+OptType:
+    %empty
+    {
+        $$ = NULL;
+    }
+  | ':' Type
+    {
+        $$ = $2;
+    }
+
+Type:
+    TypeDef
+    {
+        $$ = $1;
+    }
+  | T_REF TypeDef
+    {
+        new_RefType(&$$, $2);
+    }
+
+TypeDef:
+    T_IDENT
+    {
+        new_ObjectType(&$$);
+        $$->object->className = $1;
+    }
+  | FuncType
+    {
+        $$ = $1;
+    }
+  | '(' TypeTuple ')'
+    {
+        new_TupleType(&$$, $2);
+    }
+
+OptArgTypes:
+    %empty
+    {
+        $$ = new_Vector(0);
+    }
   | '(' ')'
-        {
-            $$ = new_Vector(0);
-        }
-  | '(' named_args ')'
-        {
-            $$ = $2;
-        }
+    {
+        $$ = new_Vector(0);
+    }
+  | '(' TypesList ')'
+    {
+        $$ = $2;
+    }
 
-named_args:
-    named_type_def
-        {
-            $$ = new_Vector(0);
-            safe_method_call($$, append, $1);
-        }
-  | named_args ',' named_type_def
-        {
-            $$ = $1;
-            safe_method_call($$, append, $3);
-        }
+OptNameArgs:
+    %empty
+    {
+        $$ = new_Vector(0);
+    }
+  | '(' ')'
+    {
+        $$ = new_Vector(0);
+    }
+  | '(' NameArgs ')'
+    {
+        $$ = $2;
+    }
 
-named_type_def:
-    T_IDENT ':' type_def
-        {
-            safe_function_call(new_NamedArg, $1, $3, &$$);
-        }
+NameArgs:
+    T_IDENT ':' Type
+    {
+        $$ = new_Vector(0);
+        NamedType *arg = NULL;
+        new_NamedType($1, $3, &arg);
+        $$->append($$, arg);
+    }
+  | NameArgs ',' T_IDENT ':' Type
+    {
+        $$ = $1;
+        NamedType *arg = NULL;
+        new_NamedType($3, $5, &arg);
+        $$->append($$, arg);
+    }
+
+TypesList:
+    Type
+    {
+        $$ = new_Vector(0);
+        //Function definitions expect args to be named
+        NamedType *arg = NULL;
+        new_NamedType(NULL, $1, &arg);
+        $$->append($$, arg);
+    }
+  | TypesList ',' Type
+    {
+        $$ = $1;
+        //Function definitions expect args to be named
+        NamedType *arg = NULL;
+        new_NamedType(NULL, $3, &arg);
+        $$->append($$, arg);
+    }
+
+TypeTuple:
+    Type ',' Type
+    {
+        $$ = new_Vector(0);
+        $$->append($$, $1);
+        $$->append($$, $3);
+    }
+  | TypeTuple ',' Type
+    {
+        $$ = $1;
+        $$->append($$, $3);
+    }
+
 
 %%
 

@@ -207,21 +207,15 @@ static int define_functions(CodegenState *state, FILE *out) {
             ASTNode         *node = nodes[i];
             ASTFunctionData *data = node->data;
             fprintf(out, "void ");
-            if (data->signature->ret_type != NULL) {
+            if (data->type->function->ret_type != NULL) {
                 fprintf(out, "*");
             }
             int *index         = NULL;
             safe_method_call(state->func_defs, get, node, sizeof(node), &index);
             fprintf(out, "func%d(closure*", *index);
-            if (data->signature->extension != NULL) {
-                fprintf(out, ", void*");
-                if (data->signature->extension->type->is_ref) {
-                    fprintf(out, "*");
-                }
-            }
             size_t      arg_count;
             NamedType   **args = NULL;
-            safe_method_call(data->signature->named_args,
+            safe_method_call(data->type->function->named_args,
                              array,
                              &arg_count,
                              &args);
@@ -261,22 +255,15 @@ static int define_functions(CodegenState *state, FILE *out) {
                 fprintf(out, "/* Anonymous Function */\n");
             }
             fprintf(out, "void ");
-            if (data->signature->ret_type != NULL) {
+            if (data->type->function->ret_type != NULL) {
                 fprintf(out, "*");
             }
             int *index         = NULL;
             safe_method_call(state->func_defs, get, node, sizeof(node), &index);
             fprintf(out, "func%d(closure *c", *index);
-            if (data->signature->extension != NULL) {
-                fprintf(out, ", void *");
-                if (data->signature->extension->type->is_ref) {
-                    fprintf(out, "*");
-                }
-                fprintf(out, "%s", data->signature->extension->name);
-            }
             size_t      arg_count;
             NamedType   **args = NULL;
-            safe_method_call(data->signature->named_args,
+            safe_method_call(data->type->function->named_args,
                              array,
                              &arg_count,
                              &args);
@@ -543,7 +530,11 @@ char *CodeGen_Return(const void *this, void *state, FILE *out) {
     return ret;
 }
 
-char *CodeGen_Expression(const void *this, void *state, FILE *out) {
+char *CodeGen_Expression(UNUSED const void *this,
+                         UNUSED void *state,
+                         UNUSED FILE *out) {
+    return strdup("EXPRESSION");
+    /*
     CodegenState       *cg_state = state;
     const ASTNode      *node, *ext_node, **args;
     ASTExpressionData  *data;
@@ -654,6 +645,7 @@ char *CodeGen_Expression(const void *this, void *state, FILE *out) {
             return expr_vtable->codegen(expr_node, state, out);
     }
     return NULL;
+     */
 }
 
 char *CodeGen_Ref(const void *this, void *state, FILE *out) {
@@ -682,11 +674,10 @@ char *CodeGen_Paren(const void *this, void *state, FILE *out) {
     return vtable->codegen(data->val, state, out);
 }
 
-char *CodeGen_Hold(const void *this, void *state, FILE *out) {
-    const ASTNode *node   = this;
-    ASTHoldData   *data   = node->data;
-    ASTHoldVTable *vtable = data->val->vtable;
-    return vtable->codegen(data->val, state, out);
+char *CodeGen_Hold(UNUSED const void *this,
+                   UNUSED void *state,
+                   UNUSED FILE *out) {
+    return strdup("HOLD");
 }
 
 char *CodeGen_Function(const void *this, void *state, FILE *out) {

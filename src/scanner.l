@@ -8,7 +8,7 @@
 
 const Stack *indent_stack;
 const Queue *tok_queue;
-YYLTYPE save_loc = { 1, 1, 1, 1 };
+YYLTYPE save_loc = { 0 };
 int indent = 0;
 enum { NOT_SET, SPACES, TABS } indent_type = NOT_SET;
 
@@ -20,14 +20,17 @@ typedef struct token {
 
 #define YY_USER_ACTION \
     *yylloc = save_loc; \
-    yylloc->first_line = yylloc->last_line; \
+    yylloc->first_line = yylineno; \
     yylloc->first_column = yylloc->last_column; \
     for (int i = 0; yytext[i] != '\0'; i++) { \
-        if (yytext[i] == '\n') { \
-            yylloc->last_line++; \
-            yylloc->last_column = 1; \
-        } else if (yytext[i] != '\r') { \
-            yylloc->last_column++; \
+        switch(yytext[i]) { \
+            case '\n': \
+                yylloc->last_line++; \
+                yylloc->last_column = 0; \
+                break; \
+            case '\r': break;\
+            default: \
+                yylloc->last_column++; \
         } \
     } \
     save_loc = *yylloc;
@@ -112,6 +115,9 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
             case T_DEFINE:
                 printf("DEFINE\n");
                 return 1;
+            case T_HOLD:
+                printf("HOLD\n");
+                return 1;
             case T_ARROW:
                 printf("ARROW\n");
                 return 1;
@@ -130,6 +136,9 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
             case T_IDENT:
                 printf("IDENT   (%s)\n", lval->str_val);
                 return 1;
+            case END:
+                printf("END OF FILE\n");
+                return 1;
         }
         printf("LITERAL (%c)\n", *type);
          */
@@ -140,7 +149,7 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
 
 %}
 
-%option warn nodefault
+%option warn
 %option reentrant noyywrap never-interactive nounistd
 %option bison-bridge bison-locations
 %option noinput
@@ -239,7 +248,8 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
     class  { push_token((Token){.type=T_CLASS}); }
     ->     { push_token((Token){.type=T_ARROW}); }
     :=     { push_token((Token){.type=T_DEFINE}); }
-    [=:\(\),\[\]] {
+    !      { push_token((Token){.type=T_HOLD}); }
+    [:\(\),\[\];\{\}] {
         push_token((Token){.type=*yytext});
     }
 
@@ -255,6 +265,16 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
         push_token((Token){.type=T_IDENT,  .value.str_val=val});
     }
 
+    [ \t]+ // Ignore non-leading whitespace
+    [\~\!\%\^\*\/\+\-\=]+ {
+        char *val;
+        asprintf(&val, "0x%X", yytext[0]);
+        for (int i = 1; yytext[i] != '\0'; i++) {
+            append_string(&val, "%X", yytext[i]);
+        }
+        push_token((Token){.type=T_IDENT, .value.str_val=val});
+    }
+
     [\n\r]+ {
         BEGIN(INITIAL);
         push_token((Token){.type=T_NEWLINE});
@@ -265,23 +285,6 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
         }
     }
 
-    ; {
-        push_token((Token){.type=T_NEWLINE});
-        enum yytokentype type;
-        if (pop_token_queue(yylval, &type, yylloc)) {
-            return type;
-        }
-    }
-
-    [ \t]+ // Ignore non-leading whitespace
-    [\~\!\%\^\*\/\+\-\=]+ {
-        char *val;
-        asprintf(&val, "0x%X", yytext[0]);
-        for (int i = 1; yytext[i] != '\0'; i++) {
-            append_string(&val, "%X", yytext[i]);
-        }
-        push_token((Token){.type=T_IDENT, .value.str_val=val});
-    }
     . {
         char *val = NULL;
         safe_asprintf(&val, "0x%X", (int)*yytext);

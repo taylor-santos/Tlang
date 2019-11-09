@@ -10,10 +10,11 @@
 
 typedef struct expr_node Expression;
 struct expr_node {
-    enum { EXPR_FUNC, EXPR_VALUE, EXPR_CLASS } type;
+    enum { EXPR_CLASS } type;
+    union {
+        VarType *object;
+    };
     const void   *node;
-    const Vector *args;
-    const void   *extension;
 };
 void free_Expression(void*);
 
@@ -152,7 +153,7 @@ struct ast_return_vtable {
 const ASTNode *new_ReturnNode(struct YYLTYPE *loc, const void *value);
 
 
-/* Expression Node < AST Node */
+/* Expression Node < Statement Node */
 typedef struct ast_expression_data   ASTExpressionData;
 typedef struct ast_expression_vtable ASTExpressionVTable;
 struct ast_expression_data {
@@ -170,6 +171,24 @@ struct ast_expression_vtable {
     int  (*get_name)(const void*, char**);
 };
 const ASTNode *new_ExpressionNode(struct YYLTYPE *loc, const Vector *exprs);
+
+/* Tuple Node < Statement Node */
+typedef struct ast_tuple_data   ASTTupleData;
+typedef struct ast_tuple_vtable ASTTupleVTable;
+struct ast_tuple_data {
+    struct YYLTYPE *loc;
+    VarType        *type;
+    const Vector   *exprs;
+};
+struct ast_tuple_vtable {
+    void (*free)    (const void*);
+    void (*json)    (const void*, int, FILE*);
+    char*(*codegen) (const void*, void*, FILE*);
+    int  (*get_type)(const void*, const Map*, void*, VarType**);
+    int  (*get_vars)(const void*, const Vector*);
+    int  (*get_name)(const void*, char**);
+};
+const ASTNode *new_TupleNode(struct YYLTYPE *loc, const Vector *exprs);
 
 
 /* Ref Node < Statement Node */
@@ -191,6 +210,24 @@ struct ast_ref_vtable {
 const ASTNode *new_RefNode(struct YYLTYPE *loc, const ASTNode *expr);
 
 
+/* Hold Node < Statement Node */
+typedef struct ast_hold_data   ASTHoldData;
+typedef struct ast_hold_vtable ASTHoldVTable;
+struct ast_hold_data {
+    struct YYLTYPE *loc;
+    VarType        *type;
+};
+struct ast_hold_vtable {
+    void (*free)    (const void*);
+    void (*json)    (const void*, int, FILE*);
+    char*(*codegen) (const void*, void*, FILE*);
+    int  (*get_type)(const void*, const Map*, void*, VarType**);
+    int  (*get_vars)(const void*, const Vector*);
+    int  (*get_name)(const void*, char**);
+};
+const ASTNode *new_HoldNode(struct YYLTYPE *loc);
+
+
 /* Paren Node < Statement Node */
 typedef struct ast_paren_data   ASTParenData;
 typedef struct ast_paren_vtable ASTParenVTable;
@@ -208,25 +245,6 @@ struct ast_paren_vtable {
     int  (*get_name)(const void*, char**);
 };
 const ASTNode *new_ParenNode(struct YYLTYPE *loc, const ASTNode *val);
-
-
-/* Hold Node < Statement Node */
-typedef struct ast_hold_data   ASTHoldData;
-typedef struct ast_hold_vtable ASTHoldVTable;
-struct ast_hold_data {
-    struct YYLTYPE *loc;
-    VarType        *type;
-    const ASTNode  *val;
-};
-struct ast_hold_vtable {
-    void (*free)    (const void*);
-    void (*json)    (const void*, int, FILE*);
-    char*(*codegen) (const void*, void*, FILE*);
-    int  (*get_type)(const void*, const Map*, void*, VarType**);
-    int  (*get_vars)(const void*, const Vector*);
-    int  (*get_name)(const void*, char**);
-};
-const ASTNode *new_HoldNode(struct YYLTYPE *loc, const ASTNode *val);
 
 
 /* LExpr Node < RExpr Node */
@@ -253,7 +271,6 @@ typedef struct ast_function_vtable ASTFunctionVTable;
 struct ast_function_data {
     struct YYLTYPE *loc;
     VarType        *type;
-    FuncType       *signature;
     const Vector   *stmts;   // Vector<ASTNode*>
     const Map      *symbols; // Map<char*, VarType*>
     const Map      *env;     // Map<char*, int>
@@ -269,7 +286,7 @@ struct ast_function_vtable {
     int  (*get_name)(const void*, char**);
 };
 const ASTNode *new_FunctionNode(struct YYLTYPE *loc,
-                                FuncType *signature,
+                                VarType *signature,
                                 const Vector *stmts);
 
 
