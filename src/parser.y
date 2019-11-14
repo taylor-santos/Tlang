@@ -72,7 +72,7 @@
 
 %type<ast>  File Return Statement Variable Expression SubExpr Value
             FuncBlock ClassBlock
-%type<vec>  Statements ReturnStatements OneLineStatements
+%type<vec>  Statements ReturnStatements OneLineStatementsList OneLineStatements
             OneLineReturnStatements OptRefExpr ExprChain OptTypes Tuple
             OptArgTypes
             OptNameArgs NameArgs TypesList TypeTuple
@@ -98,7 +98,7 @@ Statements:
         $$ = new_Vector(0);
         $$->append($$, $1);
     }
-  | OneLineStatements Statement T_NEWLINE
+  | OneLineStatementsList Statement T_NEWLINE
     {
         $$ = $1;
         $$->append($$, $2);
@@ -125,13 +125,25 @@ ReturnStatements:
         $$->append($$, $2);
     }
 
-OneLineStatements:
+OneLineStatementsList:
     Statement ';'
     {
         $$ = new_Vector(0);
         $$->append($$, $1);
     }
-  | OneLineStatements Statement ';'
+  | OneLineStatementsList Statement ';'
+    {
+        $$ = $1;
+        $$->append($$, $2);
+    }
+
+OneLineStatements:
+    Statement
+    {
+        $$ = new_Vector(0);
+        $$->append($$, $1);
+    }
+  | OneLineStatementsList Statement
     {
         $$ = $1;
         $$->append($$, $2);
@@ -148,12 +160,12 @@ OneLineReturnStatements:
         $$ = new_Vector(0);
         $$->append($$, $1);
     }
-  | OneLineStatements Statement
+  | OneLineStatementsList Statement
     {
         $$ = $1;
         $$->append($$, $2);
     }
-  | OneLineStatements Return
+  | OneLineStatementsList Return
     {
         $$ = $1;
         $$->append($$, $2);
@@ -174,7 +186,7 @@ Statement:
     {
         $$ = $1;
     }
-  | Variable T_DEFINE Expression
+  | Variable T_DEFINE Statement
     {
         $$ = new_DefNode(&@$, $1, $3);
     }
@@ -297,6 +309,10 @@ ClassBlock:
     T_CLASS OptTypes T_NEWLINE T_INDENT Statements T_OUTDENT
     {
         $$ = new_ClassNode(&@$, $2, $5);
+    }
+  | T_CLASS OptTypes '{' OneLineStatements '}'
+    {
+        $$ = new_ClassNode(&@$, $2, $4);
     }
 
 OptTypes:

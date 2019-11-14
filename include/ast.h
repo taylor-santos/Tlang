@@ -62,6 +62,8 @@ typedef struct ast_statement_vtable ASTStatementVTable;
 struct ast_statement_data {
     struct YYLTYPE *loc;
     VarType        *type;
+    char           *name;
+    int             is_hold;
 };
 struct ast_statement_vtable {
     void (*free)    (const void*);
@@ -69,7 +71,6 @@ struct ast_statement_vtable {
     char*(*codegen) (const void*, void*, FILE*);
     int  (*get_type)(const void*, const Map*, void*, VarType**);
     int  (*get_vars)(const void*, const Vector*);
-    int  (*get_name)(const void*, char**);
 };
 
 
@@ -79,6 +80,8 @@ typedef struct ast_r_expr_vtable ASTRExprVTable;
 struct ast_r_expr_data {
     struct YYLTYPE *loc;
     VarType        *type;
+    char           *name;
+    int             is_hold;
 };
 struct ast_r_expr_vtable {
     void (*free)    (const void*);
@@ -86,7 +89,6 @@ struct ast_r_expr_vtable {
     char*(*codegen) (const void*, void*, FILE*);
     int  (*get_type)(const void*, const Map*, void*, VarType**);
     int  (*get_vars)(const void*, const Vector*);
-    int  (*get_name)(const void*, char**);
 };
 
 
@@ -96,6 +98,8 @@ typedef struct ast_assignment_vtable ASTAssignmentVTable;
 struct ast_assignment_data {
     struct YYLTYPE *loc;
     VarType        *type;
+    char           *name;
+    int             is_hold;
     const void     *lhs;
     const void     *rhs;
 };
@@ -105,7 +109,6 @@ struct ast_assignment_vtable {
     char*(*codegen) (const void*, void*, FILE*);
     int  (*get_type)(const void*, const Map*, void*, VarType**);
     int  (*get_vars)(const void*, const Vector*);
-    int  (*get_name)(const void*, char**);
 };
 const ASTNode *new_AssignmentNode(struct YYLTYPE *loc,
                                   const void *lhs,
@@ -118,6 +121,8 @@ typedef struct ast_def_vtable ASTDefVTable;
 struct ast_def_data {
     struct YYLTYPE *loc;
     VarType        *type;
+    char           *name;
+    int             is_hold;
     const void     *lhs;
     const void     *rhs;
 };
@@ -127,7 +132,6 @@ struct ast_def_vtable {
     char*(*codegen) (const void*, void*, FILE*);
     int  (*get_type)(const void*, const Map*, void*, VarType**);
     int  (*get_vars)(const void*, const Vector*);
-    int  (*get_name)(const void*, char**);
 };
 const ASTNode *new_DefNode(struct YYLTYPE *loc,
                            const void *lhs,
@@ -140,6 +144,8 @@ typedef struct ast_return_vtable ASTReturnVTable;
 struct ast_return_data {
     struct YYLTYPE *loc;
     VarType        *type;
+    char           *name;
+    int             is_hold;
     const ASTNode  *returns;
 };
 struct ast_return_vtable {
@@ -148,7 +154,6 @@ struct ast_return_vtable {
     char*(*codegen) (const void*, void*, FILE*);
     int  (*get_type)(const void*, const Map*, void*, VarType**);
     int  (*get_vars)(const void*, const Vector*);
-    int  (*get_name)(const void*, char**);
 };
 const ASTNode *new_ReturnNode(struct YYLTYPE *loc, const void *value);
 
@@ -159,6 +164,8 @@ typedef struct ast_expression_vtable ASTExpressionVTable;
 struct ast_expression_data {
     struct YYLTYPE *loc;
     VarType        *type;
+    char           *name;
+    int             is_hold;
     const Vector   *exprs;
     Expression     *expr_node;
 };
@@ -168,7 +175,6 @@ struct ast_expression_vtable {
     char*(*codegen) (const void*, void*, FILE*);
     int  (*get_type)(const void*, const Map*, void*, VarType**);
     int  (*get_vars)(const void*, const Vector*);
-    int  (*get_name)(const void*, char**);
 };
 const ASTNode *new_ExpressionNode(struct YYLTYPE *loc, const Vector *exprs);
 
@@ -178,6 +184,8 @@ typedef struct ast_tuple_vtable ASTTupleVTable;
 struct ast_tuple_data {
     struct YYLTYPE *loc;
     VarType        *type;
+    char           *name;
+    int             is_hold;
     const Vector   *exprs;
 };
 struct ast_tuple_vtable {
@@ -186,7 +194,6 @@ struct ast_tuple_vtable {
     char*(*codegen) (const void*, void*, FILE*);
     int  (*get_type)(const void*, const Map*, void*, VarType**);
     int  (*get_vars)(const void*, const Vector*);
-    int  (*get_name)(const void*, char**);
 };
 const ASTNode *new_TupleNode(struct YYLTYPE *loc, const Vector *exprs);
 
@@ -197,6 +204,8 @@ typedef struct ast_ref_vtable ASTRefVTable;
 struct ast_ref_data {
     struct YYLTYPE *loc;
     VarType        *type;
+    char           *name;
+    int             is_hold;
     const ASTNode  *expr;
 };
 struct ast_ref_vtable {
@@ -205,7 +214,6 @@ struct ast_ref_vtable {
     char*(*codegen) (const void*, void*, FILE*);
     int  (*get_type)(const void*, const Map*, void*, VarType**);
     int  (*get_vars)(const void*, const Vector*);
-    int  (*get_name)(const void*, char**);
 };
 const ASTNode *new_RefNode(struct YYLTYPE *loc, const ASTNode *expr);
 
@@ -216,6 +224,8 @@ typedef struct ast_hold_vtable ASTHoldVTable;
 struct ast_hold_data {
     struct YYLTYPE *loc;
     VarType        *type;
+    char           *name;
+    int             is_hold;
 };
 struct ast_hold_vtable {
     void (*free)    (const void*);
@@ -223,7 +233,6 @@ struct ast_hold_vtable {
     char*(*codegen) (const void*, void*, FILE*);
     int  (*get_type)(const void*, const Map*, void*, VarType**);
     int  (*get_vars)(const void*, const Vector*);
-    int  (*get_name)(const void*, char**);
 };
 const ASTNode *new_HoldNode(struct YYLTYPE *loc);
 
@@ -234,6 +243,8 @@ typedef struct ast_paren_vtable ASTParenVTable;
 struct ast_paren_data {
     struct YYLTYPE *loc;
     VarType        *type;
+    char           *name;
+    int             is_hold;
     const ASTNode  *val;
 };
 struct ast_paren_vtable {
@@ -242,7 +253,6 @@ struct ast_paren_vtable {
     char*(*codegen) (const void*, void*, FILE*);
     int  (*get_type)(const void*, const Map*, void*, VarType**);
     int  (*get_vars)(const void*, const Vector*);
-    int  (*get_name)(const void*, char**);
 };
 const ASTNode *new_ParenNode(struct YYLTYPE *loc, const ASTNode *val);
 
@@ -253,6 +263,8 @@ typedef struct ast_l_expr_vtable ASTLExprVTable;
 struct ast_l_expr_data {
     struct YYLTYPE *loc;
     VarType        *type;
+    char           *name;
+    int             is_hold;
 };
 struct ast_l_expr_vtable {
     void (*free)       (const void*);
@@ -260,8 +272,6 @@ struct ast_l_expr_vtable {
     char*(*codegen)    (const void*, void*, FILE*);
     int  (*get_type)   (const void*, const Map*, void*, VarType**);
     int  (*get_vars)   (const void*, const Vector*);
-    int  (*get_name)   (const void*, char**);
-    int  (*assign_type)(const void*, VarType*, const Map*);
 };
 
 
@@ -271,6 +281,8 @@ typedef struct ast_function_vtable ASTFunctionVTable;
 struct ast_function_data {
     struct YYLTYPE *loc;
     VarType        *type;
+    char           *name;
+    int             is_hold;
     const Vector   *stmts;   // Vector<ASTNode*>
     const Map      *symbols; // Map<char*, VarType*>
     const Map      *env;     // Map<char*, int>
@@ -283,7 +295,6 @@ struct ast_function_vtable {
     char*(*codegen) (const void*, void*, FILE*);
     int  (*get_type)(const void*, const Map*, void*, VarType**);
     int  (*get_vars)(const void*, const Vector*);
-    int  (*get_name)(const void*, char**);
 };
 const ASTNode *new_FunctionNode(struct YYLTYPE *loc,
                                 VarType *signature,
@@ -296,6 +307,8 @@ typedef struct ast_class_vtable ASTClassVTable;
 struct ast_class_data {
     struct YYLTYPE *loc;
     VarType        *type;
+    char           *name;
+    int             is_hold;
     const Vector   *inheritance;
     const Vector   *stmts;
     const Map      *symbols;
@@ -308,7 +321,6 @@ struct ast_class_vtable {
     char*(*codegen) (const void*, void*, FILE*);
     int  (*get_type)(const void*, const Map*, void*, VarType**);
     int  (*get_vars)(const void*, const Vector*);
-    int  (*get_name)(const void*, char**);
 };
 const ASTNode *new_ClassNode(struct YYLTYPE *loc,
                              const Vector *inheritance,
@@ -321,7 +333,9 @@ typedef struct ast_int_vtable ASTIntVTable;
 struct ast_int_data {
     struct YYLTYPE *loc;
     VarType        *type;
-    int            val;
+    char           *name;
+    int             is_hold;
+    int             val;
 };
 struct ast_int_vtable {
     void (*free)       (const void*);
@@ -329,8 +343,6 @@ struct ast_int_vtable {
     char*(*codegen)    (const void*, void*, FILE*);
     int  (*get_type)   (const void*, const Map*, void*, VarType**);
     int  (*get_vars)   (const void*, const Vector*);
-    int  (*get_name)   (const void*, char**);
-    int  (*assign_type)(const void*, VarType*, const Map*);
 };
 const ASTNode *new_IntNode(struct YYLTYPE *loc, int val);
 
@@ -341,7 +353,9 @@ typedef struct ast_double_vtable ASTDoubleVTable;
 struct ast_double_data {
     struct YYLTYPE *loc;
     VarType        *type;
-    double         val;
+    char           *name;
+    int             is_hold;
+    double          val;
 };
 struct ast_double_vtable {
     void (*free)       (const void*);
@@ -349,8 +363,6 @@ struct ast_double_vtable {
     char*(*codegen)    (const void*, void*, FILE*);
     int  (*get_type)   (const void*, const Map*, void*, VarType**);
     int  (*get_vars)   (const void*, const Vector*);
-    int  (*get_name)   (const void*, char**);
-    int  (*assign_type)(const void*, VarType*, const Map*);
 };
 const ASTNode *new_DoubleNode(struct YYLTYPE *loc, double val);
 
@@ -362,6 +374,7 @@ struct ast_variable_data {
     struct YYLTYPE *loc;
     VarType        *type;
     char           *name;
+    int             is_hold;
 };
 struct ast_variable_vtable {
     void (*free)       (const void*);
@@ -369,8 +382,6 @@ struct ast_variable_vtable {
     char*(*codegen)    (const void*, void*, FILE*);
     int  (*get_type)   (const void*, const Map*, void*, VarType**);
     int  (*get_vars)   (const void*, const Vector*);
-    int  (*get_name)   (const void*, char**);
-    int  (*assign_type)(const void*, VarType*, const Map*);
 };
 const ASTNode *new_VariableNode(struct YYLTYPE *loc, char *name);
 
@@ -382,6 +393,7 @@ struct ast_typed_var_data {
     struct YYLTYPE *loc;
     VarType        *type;
     char           *name;
+    int             is_hold;
     VarType        *given_type;
 };
 struct ast_typed_var_vtable {
@@ -390,8 +402,6 @@ struct ast_typed_var_vtable {
     char*(*codegen)    (const void*, void*, FILE*);
     int  (*get_type)   (const void*, const Map*, void*, VarType**);
     int  (*get_vars)   (const void*, const Vector*);
-    int  (*get_name)   (const void*, char**);
-    int  (*assign_type)(const void*, VarType*, const Map*);
 };
 const ASTNode *new_TypedVarNode(struct YYLTYPE *loc, char *name, VarType *type);
 

@@ -35,7 +35,7 @@ struct func_type {
 };
 
 struct class_type {
-    int isDef;
+    ClassType *def;
     const Vector *fields;   // Vector<NamedType*>
     const Map *field_names; // Map<char*, VarType*>
     size_t classID;
@@ -58,7 +58,7 @@ void free_NamedType(void*);
 int new_RefType   (VarType **vartype_ptr, VarType *sub_type);
 int new_TupleType (VarType **vartype_ptr, const Vector *types);
 int new_HoldType  (VarType **vartype_ptr);
-int new_ClassType (VarType **vartype_ptr, int classID);
+int new_ClassType (VarType **vartype_ptr);
 int new_ObjectType(VarType **vartype_ptr);
 int new_ParenType (VarType **vartype_ptr, VarType *sub_type);
 int new_NamedType (char *name, VarType *type, NamedType **namedarg_ptr);
