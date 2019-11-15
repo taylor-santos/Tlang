@@ -268,7 +268,7 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
     [ \t]+ // Ignore non-leading whitespace
     [\~\!\%\^\*\/\+\-\=]+ {
         char *val;
-        asprintf(&val, "0x%X", yytext[0]);
+        asprintf(&val, "var_0x%X", yytext[0]);
         for (int i = 1; yytext[i] != '\0'; i++) {
             append_string(&val, "%X", yytext[i]);
         }
@@ -287,7 +287,7 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
 
     . {
         char *val = NULL;
-        safe_asprintf(&val, "0x%X", (int)*yytext);
+        safe_asprintf(&val, "var_0x%X", (int)*yytext);
         push_token((Token){.type=T_IDENT, .value.str_val=val});
     }
 }

@@ -11,6 +11,7 @@ char *CodeGen_Assignment(const void *this, void *state, FILE *out);
 char *CodeGen_Def       (const void *this, void *state, FILE *out);
 char *CodeGen_Return    (const void *this, void *state, FILE *out);
 char *CodeGen_Expression(const void *this, void *state, FILE *out);
+char *CodeGen_Tuple     (const void *this, void *state, FILE *out);
 char *CodeGen_Ref       (const void *this, void *state, FILE *out);
 char *CodeGen_Paren     (const void *this, void *state, FILE *out);
 char *CodeGen_Hold      (const void *this, void *state, FILE *out);

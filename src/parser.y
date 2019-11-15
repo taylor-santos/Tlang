@@ -74,7 +74,7 @@
             FuncBlock ClassBlock
 %type<vec>  Statements ReturnStatements OneLineStatementsList OneLineStatements
             OneLineReturnStatements OptRefExpr ExprChain OptTypes Tuple
-            OptArgTypes
+            OptArgTypes Variables
             OptNameArgs NameArgs TypesList TypeTuple
 %type<type> FuncType OptType Type TypeDef
 
@@ -186,9 +186,21 @@ Statement:
     {
         $$ = $1;
     }
-  | Variable T_DEFINE Statement
+  | Variables T_DEFINE Statement
     {
         $$ = new_DefNode(&@$, $1, $3);
+    }
+
+Variables:
+    Variable
+    {
+        $$ = new_Vector(0);
+        $$->append($$, $1);
+    }
+  | Variables ',' Variable
+    {
+        $$ = $1;
+        $$->append($$, $3);
     }
 
 Variable:
@@ -326,17 +338,16 @@ OptTypes:
     }
 
 Tuple:
-    ExprChain ',' ExprChain
+    Expression ',' Expression
     {
         $$ = new_Vector(0);
-        $$->append($$, new_ExpressionNode(&@$, $1));
-        $$->append($$, new_ExpressionNode(&@$, $3));
+        $$->append($$, $1);
+        $$->append($$, $3);
     }
-  | Tuple ',' ExprChain
+  | Tuple ',' Expression
     {
         $$ = $1;
-        const ASTNode *expr = new_ExpressionNode(&@3, $3);
-        $$->append($$, expr);
+        $$->append($$, $3);
     }
 
 OptType:

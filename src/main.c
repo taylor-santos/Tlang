@@ -103,12 +103,10 @@ int main(int argc, char *argv[]) {
             if (!vtable->type_check(AST)) {
                 ASTProgramData *data = AST->data;
                 print_Map(data->symbols, print_VarType);
-                /*
                 if (!vtable->codegen(AST, NULL, output)) {
                 } else {
                     printf("Code generation failed!\n");
                 }
-                 */
             } else {
                 printf("Type checker failed!\n");
             }

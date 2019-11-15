@@ -21,7 +21,6 @@ struct var_type {
         VarType *sub_type;
     };
     int is_ref;
-    int init;
 };
 
 struct named_type {
@@ -36,6 +35,7 @@ struct func_type {
 
 struct class_type {
     ClassType *def;
+    const Vector *stmts;    // Vector<const ASTNode*>
     const Vector *fields;   // Vector<NamedType*>
     const Map *field_names; // Map<char*, VarType*>
     size_t classID;
@@ -60,7 +60,7 @@ int new_TupleType (VarType **vartype_ptr, const Vector *types);
 int new_HoldType  (VarType **vartype_ptr);
 int new_ClassType (VarType **vartype_ptr);
 int new_ObjectType(VarType **vartype_ptr);
-int new_ParenType (VarType **vartype_ptr, VarType *sub_type);
+int new_ParenType (VarType **vartype_ptr);
 int new_NamedType (char *name, VarType *type, NamedType **namedarg_ptr);
 int new_FuncType  (const Vector *args,
                    VarType *ret_type,
@@ -85,9 +85,6 @@ int GetType_Double    (const void*, const Map*, void*, VarType**);
 int GetType_Function  (const void*, const Map*, void*, VarType**);
 int GetType_Class     (const void*, const Map*, void*, VarType**);
 
-int AssignType_Variable(const void*, VarType*, const Map*);
-int AssignType_TypedVar(const void*, VarType*, const Map*);
-
 int GetVars_Assignment(const void*, const Vector*);
 int GetVars_Def       (const void*, const Vector*);
 int GetVars_Return    (const void*, const Vector*);
@@ -102,20 +99,5 @@ int GetVars_Int       (const void*, const Vector*);
 int GetVars_Double    (const void*, const Vector*);
 int GetVars_Function  (const void*, const Vector*);
 int GetVars_Class     (const void*, const Vector*);
-
-int GetName_Assignment(const void*, char**);
-int GetName_Def       (const void*, char**);
-int GetName_Return    (const void*, char**);
-int GetName_Expression(const void*, char**);
-int GetName_Tuple     (const void*, char**);
-int GetName_Ref       (const void*, char**);
-int GetName_Paren     (const void*, char**);
-int GetName_Hold      (const void*, char**);
-int GetName_Variable  (const void*, char**);
-int GetName_TypedVar  (const void*, char**);
-int GetName_Int       (const void*, char**);
-int GetName_Double    (const void*, char**);
-int GetName_Function  (const void*, char**);
-int GetName_Class     (const void*, char**);
 
 #endif//TYPECHECKER_H
