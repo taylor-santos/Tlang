@@ -17,16 +17,10 @@ flex_target(
 add_flex_bison_dependency(Scanner Parser)
 
 include_directories(${CMAKE_CURRENT_BINARY_DIR} include)
+
+file(GLOB SRC "src/*.c" "src/ast/*.c")
+
 add_executable(tcc
         ${BISON_Parser_OUTPUTS}
         ${FLEX_Scanner_OUTPUTS}
-        src/main.c
-        src/stack.c
-        src/queue.c
-        src/vector.c
-        src/map.c
-        src/ast.c
-        src/typechecker.c
-        src/codegen.c
-        src/safe.c
-        include/builtins.h src/builtins.c)
+        ${SRC})

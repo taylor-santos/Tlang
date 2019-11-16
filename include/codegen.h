@@ -1,25 +1,17 @@
-#ifndef CODEGEN_H
-#define CODEGEN_H
+#ifndef TLANG_CODEGEN_H
+#define TLANG_CODEGEN_H
 
-#define INDENT_WIDTH 4
-
+#include <stdio.h>
 #include "ast.h"
-#include "typechecker.h"
 
-char *CodeGen_Program   (const void *this, void *state, FILE *out);
-char *CodeGen_Assignment(const void *this, void *state, FILE *out);
-char *CodeGen_Def       (const void *this, void *state, FILE *out);
-char *CodeGen_Return    (const void *this, void *state, FILE *out);
-char *CodeGen_Expression(const void *this, void *state, FILE *out);
-char *CodeGen_Tuple     (const void *this, void *state, FILE *out);
-char *CodeGen_Ref       (const void *this, void *state, FILE *out);
-char *CodeGen_Paren     (const void *this, void *state, FILE *out);
-char *CodeGen_Hold      (const void *this, void *state, FILE *out);
-char *CodeGen_Function  (const void *this, void *state, FILE *out);
-char *CodeGen_Class     (const void *this, void *state, FILE *out);
-char *CodeGen_Int       (const void *this, void *state, FILE *out);
-char *CodeGen_Double    (const void *this, void *state, FILE *out);
-char *CodeGen_Variable  (const void *this, void *state, FILE *out);
-char *CodeGen_TypedVar  (const void *this, void *state, FILE *out);
+typedef struct {
+    int indent;
+    const Map *func_defs;
+    const Vector *class_defs;
+    int tmp_count;
+} CodegenState;
 
-#endif//CODEGEN_H
+int GenerateCode(const ASTNode *program, FILE *out);
+void print_indent(int n, FILE *out);
+
+#endif//TLANG_CODEGEN_H

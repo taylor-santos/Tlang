@@ -4,14 +4,15 @@
 #include "map.h"
 #include "vector.h"
 #include "stack.h"
+#include "ast.h"
 
-typedef struct var_type     VarType;
-typedef struct named_type   NamedType;
-typedef struct func_type    FuncType;
-typedef struct class_type   ClassType;
-typedef struct object_type  ObjectType;
+typedef struct VarType    VarType;
+typedef struct NamedType  NamedType;
+typedef struct FuncType   FuncType;
+typedef struct ClassType  ClassType;
+typedef struct ObjectType ObjectType;
 
-struct var_type {
+struct VarType {
     enum { FUNCTION, REFERENCE, HOLD, CLASS, OBJECT, TUPLE, PAREN } type;
     union {
         FuncType *function;
@@ -23,17 +24,17 @@ struct var_type {
     int is_ref;
 };
 
-struct named_type {
+struct NamedType {
     VarType *type;
     char    *name;
 };
 
-struct func_type {
+struct FuncType {
     const Vector *named_args; // Vector<NamedType*>
     VarType      *ret_type;
 };
 
-struct class_type {
+struct ClassType {
     ClassType *def;
     const Vector *stmts;    // Vector<const ASTNode*>
     const Vector *fields;   // Vector<NamedType*>
@@ -42,12 +43,22 @@ struct class_type {
     VarType *instance;
 };
 
-struct object_type {
+struct ObjectType {
     int classID;
     char *className;
 };
 
+typedef struct {
+    const struct ASTNode *program_node;
+    const Vector *new_symbols; //Vector<NamedType*>
+    VarType *curr_ret_type;
+} TypeCheckState;
+
 int add_builtins(const Map*, const Vector*);
+int typecmp(const VarType *type1, const VarType *type2);
+int copy_VarType(const void *type, const void *copy_ptr);
+void print_VarType(const void*);
+int getObjectID(VarType *type, const Map *symbols);
 
 void free_VarType(void*);
 void free_FuncType(void*);
@@ -65,39 +76,5 @@ int new_NamedType (char *name, VarType *type, NamedType **namedarg_ptr);
 int new_FuncType  (const Vector *args,
                    VarType *ret_type,
                    VarType **vartype_ptr);
-
-void print_VarType(const void*);
-
-int TypeCheck_Program(const void*);
-
-int GetType_Assignment(const void*, const Map*, void*, VarType**);
-int GetType_Def       (const void*, const Map*, void*, VarType**);
-int GetType_Return    (const void*, const Map*, void*, VarType**);
-int GetType_Expression(const void*, const Map*, void*, VarType**);
-int GetType_Tuple     (const void*, const Map*, void*, VarType**);
-int GetType_Ref       (const void*, const Map*, void*, VarType**);
-int GetType_Paren     (const void*, const Map*, void*, VarType**);
-int GetType_Hold      (const void*, const Map*, void*, VarType**);
-int GetType_Variable  (const void*, const Map*, void*, VarType**);
-int GetType_TypedVar  (const void*, const Map*, void*, VarType**);
-int GetType_Int       (const void*, const Map*, void*, VarType**);
-int GetType_Double    (const void*, const Map*, void*, VarType**);
-int GetType_Function  (const void*, const Map*, void*, VarType**);
-int GetType_Class     (const void*, const Map*, void*, VarType**);
-
-int GetVars_Assignment(const void*, const Vector*);
-int GetVars_Def       (const void*, const Vector*);
-int GetVars_Return    (const void*, const Vector*);
-int GetVars_Expression(const void*, const Vector*);
-int GetVars_Tuple     (const void*, const Vector*);
-int GetVars_Ref       (const void*, const Vector*);
-int GetVars_Paren     (const void*, const Vector*);
-int GetVars_Hold      (const void*, const Vector*);
-int GetVars_Variable  (const void*, const Vector*);
-int GetVars_TypedVar  (const void*, const Vector*);
-int GetVars_Int       (const void*, const Vector*);
-int GetVars_Double    (const void*, const Vector*);
-int GetVars_Function  (const void*, const Vector*);
-int GetVars_Class     (const void*, const Vector*);
 
 #endif//TYPECHECKER_H

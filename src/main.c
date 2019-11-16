@@ -1,10 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <getopt.h> // getopt()
-#include <time.h>
 #include "Tlang_parser.h"
 #include "Tlang_scanner.h"
-#include "ast.h"
+#include "ast/program.h"
+#include "codegen.h"
 
 #define NAME    "tcc"
 #define VERSION "0.1.0"
@@ -72,6 +72,7 @@ int main(int argc, char *argv[]) {
     }
     if (out_filename != NULL) {
         output = fopen(out_filename, "w+");
+        free(out_filename);
     } else {
         output = fopen("a.out.c", "w+");
     }
@@ -103,10 +104,7 @@ int main(int argc, char *argv[]) {
             if (!vtable->type_check(AST)) {
                 ASTProgramData *data = AST->data;
                 print_Map(data->symbols, print_VarType);
-                if (!vtable->codegen(AST, NULL, output)) {
-                } else {
-                    printf("Code generation failed!\n");
-                }
+                GenerateCode(AST, output);
             } else {
                 printf("Type checker failed!\n");
             }

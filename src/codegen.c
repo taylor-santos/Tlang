@@ -1,14 +1,17 @@
 #include <string.h>
-#include "codegen.h"
+#include <stdio.h>
 #include "safe.h"
 #include "builtins.h"
+#include "map.h"
+#include "vector.h"
+#include "codegen.h"
+#include "typechecker.h"
+#include "ast/class.h"
+#include "ast/statement.h"
+#include "ast/function.h"
+#include "ast/program.h"
 
-typedef struct {
-    int indent;
-    const Map *func_defs;
-    const Vector *class_defs;
-    int tmp_count;
-} CodegenState;
+#define INDENT_WIDTH 4
 
 static void include_headers(FILE *out) {
     fprintf(out, "#include <stdlib.h>\n");
@@ -17,7 +20,7 @@ static void include_headers(FILE *out) {
     fprintf(out, "\n");
 }
 
-static void print_indent(int n, FILE *out) {
+void print_indent(int n, FILE *out) {
     fprintf(out, "%*s", n * INDENT_WIDTH, "");
 }
 
@@ -405,8 +408,8 @@ int define_main(ASTProgramData *data, CodegenState *state, FILE *out) {
     return 0;
 }
 
-char *CodeGen_Program(const void *this, UNUSED void *state, FILE *out) {
-    const ASTNode *node = this;
+int GenerateCode(const ASTNode *program, FILE *out) {
+    const ASTNode *node = program;
     ASTProgramData *data = node->data;
 
     CodegenState *codegen_state = malloc(sizeof(*codegen_state));
@@ -417,7 +420,6 @@ char *CodeGen_Program(const void *this, UNUSED void *state, FILE *out) {
     codegen_state->tmp_count = 0;
     codegen_state->func_defs = data->func_defs;
     codegen_state->class_defs = data->class_defs;
-
     include_headers(out);
     define_closures(out);
     forward_declare_functions(codegen_state, out);
@@ -427,284 +429,4 @@ char *CodeGen_Program(const void *this, UNUSED void *state, FILE *out) {
     define_main(data, codegen_state, out);
     free(codegen_state);
     return 0;
-}
-
-char *CodeGen_Assignment(const void *this, void *state, FILE *out) {
-    const ASTNode *node = this;
-    ASTAssignmentData *data = node->data;
-    const ASTNode *lhs = data->lhs;
-    const ASTNode *rhs = data->rhs;
-    ASTNodeVTable *vtable = lhs->vtable;
-    ASTStatementData *lhs_data = lhs->data;
-    VarType *lhs_type = lhs_data->type;
-    char *lhs_code = vtable->codegen(lhs, state, out);
-    vtable = rhs->vtable;
-    ASTStatementData *rhs_data = rhs->data;
-    VarType *rhs_type = rhs_data->type;
-    char *rhs_code = vtable->codegen(rhs, state, out);
-    char *lhs_ref = lhs_type->is_ref
-                    ? "*"
-                    : "";
-    char *rhs_ref = rhs_type->is_ref
-                    ? "*"
-                    : "";
-    char *ret = NULL;
-    safe_asprintf(&ret, "%s%s = %s%s", lhs_ref, lhs_code, rhs_ref, rhs_code);
-    free(lhs_code);
-    free(rhs_code);
-    return ret;
-}
-
-char *CodeGen_Def(const void *this, void *state, FILE *out) {
-    CodegenState *cg_state = state;
-    const ASTNode *node = this;
-    ASTDefData *data = node->data;
-    size_t lhs_size = data->lhs->size(data->lhs);
-    const ASTNode *rhs = data->rhs;
-    ASTStatementVTable *rhs_vtable = rhs->vtable;
-    ASTStatementData *rhs_data = rhs->data;
-    char *rhs_code = rhs_vtable->codegen(rhs, state, out);
-    if (lhs_size != 1 && rhs_data->type->type == TUPLE) {
-        for (size_t i = 0; i < lhs_size; i++) {
-            ASTNode *lhs = NULL;
-            safe_method_call(data->lhs, get, i, &lhs);
-            ASTLExprVTable *lhs_vtable = lhs->vtable;
-            char *lhs_code = lhs_vtable->codegen(lhs, state, out);
-            print_indent(cg_state->indent, out);
-            fprintf(out, "%s = %s[%ld];\n", lhs_code, rhs_code, i);
-        }
-    } else {
-        ASTNode *lhs = NULL;
-        safe_method_call(data->lhs, get, 0, &lhs);
-        ASTLExprVTable *lhs_vtable = lhs->vtable;
-        char *lhs_code = lhs_vtable->codegen(lhs, state, out);
-        print_indent(cg_state->indent, out);
-        fprintf(out, "%s = %s;\n", lhs_code, rhs_code);
-    }
-    return rhs_code;
-}
-
-char *CodeGen_Return(const void *this, void *state, FILE *out) {
-    const ASTNode *node = this;
-    const ASTReturnData *data = node->data;
-    char *ret = strdup("return");
-    if (data->returns != NULL) {
-        const ASTNode *ret_node = data->returns;
-        ASTStatementVTable *ret_vtable = ret_node->vtable;
-        char *code = ret_vtable->codegen(ret_node, state, out);
-        append_string(&ret, " %s", code);
-        free(code);
-    }
-    return ret;
-}
-
-char *gen_expression(Expression *expr, CodegenState *state, FILE *out) {
-    char *tmp = NULL, *sub_expr = NULL;
-    const ASTNode *node = NULL;
-    ASTStatementVTable *vtable = NULL;
-    ASTStatementData *data = NULL;
-    switch (expr->expr_type) {
-        case EXPR_VAR:
-            node = expr->node;
-            vtable = node->vtable;
-            return vtable->codegen(node, state, out);
-        case EXPR_FIELD:
-            asprintf(&tmp, "tmp%d", state->tmp_count++);
-            sub_expr = gen_expression(expr->sub_expr, state, out);
-            print_indent(state->indent, out);
-            node = expr->sub_expr->node;
-            data = node->data;
-            int classID = data->type->object->classID;
-            fprintf(out,
-                    "void *%s = ((class%d*)%s)->%s;\n",
-                    tmp,
-                    classID,
-                    sub_expr,
-                    expr->name);
-            return tmp;
-        case EXPR_CONS:;
-            char *cons = gen_expression(expr->sub_expr, state, out);
-            asprintf(&tmp, "tmp%d", state->tmp_count++);
-            print_indent(state->indent, out);
-            fprintf(out, "void *%s = call(%s);\n", tmp, cons);
-            return tmp;
-        case EXPR_FUNC:;
-            char *arg = NULL;
-            if (expr->arg != NULL) {
-                Expression *arg_expr = expr->arg;
-                arg = gen_expression(arg_expr, state, out);
-            }
-            char *func = gen_expression(expr->sub_expr, state, out);
-            asprintf(&tmp, "tmp%d", state->tmp_count++);
-            print_indent(state->indent, out);
-            fprintf(out, "void *%s = call(%s", tmp, func);
-            if (expr->arg != NULL) {
-                fprintf(out, ", %s", arg);
-            }
-            fprintf(out, ");\n");
-            return tmp;
-    }
-    fprintf(stderr, "error: unmatched expression\n");
-    return NULL;
-}
-
-char *CodeGen_Expression(
-        const void *this, void *state, FILE *out
-) {
-    const ASTNode *node = this;
-    ASTExpressionData *data = node->data;
-    return gen_expression(data->expr_node, state, out);
-}
-
-char *CodeGen_Tuple(const void *this, void *state, FILE *out) {
-    const ASTNode *node = this;
-    ASTTupleData *data = node->data;
-    size_t size = data->exprs->size(data->exprs);
-    char **exprs = malloc(sizeof(*exprs) * size);
-    for (size_t i = 0; i < size; i++) {
-        const ASTNode *expr_node = NULL;
-        safe_method_call(data->exprs, get, i, &expr_node);
-        ASTStatementVTable *vtable = expr_node->vtable;
-        exprs[i] = vtable->codegen(expr_node, state, out);
-    }
-    char *ret = NULL;
-    CodegenState *cg_state = state;
-    asprintf(&ret, "tmp%d", cg_state->tmp_count++);
-    print_indent(cg_state->indent, out);
-    fprintf(out, "void **%s;\n", ret);
-    print_indent(cg_state->indent, out);
-    fprintf(out, "build_tuple(%s", ret);
-    for (size_t i = 0; i < size; i++) {
-        fprintf(out, ", %s", exprs[i]);
-    }
-    fprintf(out, ")");
-    return ret;
-}
-
-char *CodeGen_Ref(const void *this, void *state, FILE *out) {
-    CodegenState *cg_state = state;
-    const ASTNode *node = this;
-    ASTRefData *data = node->data;
-    ASTStatementVTable *ref_vtable = data->expr->vtable;
-    char *code = ref_vtable->codegen(data->expr, state, out);
-    ASTStatementData *ref_data = data->expr->data;
-    if (ref_data->type->is_ref) {
-        return code;
-    }
-    char *ret;
-    asprintf(&ret, "tmp%d", cg_state->tmp_count++);
-    print_indent(cg_state->indent, out);
-    fprintf(out, "void **%s = &%s;\n", ret, code);
-    free(code);
-    return ret;
-}
-
-char *CodeGen_Paren(const void *this, void *state, FILE *out) {
-    const ASTNode *node = this;
-    ASTParenData *data = node->data;
-    ASTStatementVTable *vtable = data->val->vtable;
-    return vtable->codegen(data->val, state, out);
-}
-
-char *CodeGen_Hold(
-        UNUSED const void *this, UNUSED void *state, UNUSED FILE *out
-) {
-    return strdup("HOLD");
-}
-
-char *CodeGen_Function(const void *this, void *state, FILE *out) {
-    CodegenState *cg_state = state;
-    const ASTNode *node = this;
-    ASTFunctionData *data = node->data;
-    int *index = NULL;
-    safe_method_call(cg_state->func_defs, get, node, sizeof(node), &index);
-    char *ret = NULL;
-    safe_asprintf(&ret, "tmp%d", cg_state->tmp_count++);
-    print_indent(cg_state->indent, out);
-    fprintf(out, "void *%s;\n", ret);
-    print_indent(cg_state->indent, out);
-    fprintf(out, "build_closure(%s, func%d", ret, *index);
-    const char **symbols = NULL;
-    size_t *lengths, symbol_count;
-    safe_method_call(data->env, keys, &symbol_count, &lengths, &symbols);
-    for (size_t j = 0; j < symbol_count; j++) {
-        VarType *var_type = NULL;
-        safe_method_call(data->symbols, get, symbols[j], lengths[j], &var_type);
-        fprintf(out, ", %.*s", (int) lengths[j], symbols[j]);
-        free((void *) symbols[j]);
-    }
-    free(lengths);
-    free(symbols);
-    fprintf(out, ")\n");
-    return ret;
-}
-
-char *CodeGen_Class(const void *this, void *state, FILE *out) {
-    CodegenState *cg_state = state;
-    const ASTNode *node = this;
-    ASTClassData *data = node->data;
-    VarType *type = data->type;
-    ClassType *class = type->class;
-    char *ret;
-    safe_asprintf(&ret, "tmp%d", cg_state->tmp_count++);
-    print_indent(cg_state->indent, out);
-    fprintf(out, "void *%s;\n", ret);
-    print_indent(cg_state->indent, out);
-    fprintf(out, "build_closure(%s, new_class%ld", ret, class->classID);
-    const char **symbols = NULL;
-    size_t *lengths, symbol_count;
-    safe_method_call(data->env, keys, &symbol_count, &lengths, &symbols);
-    for (size_t j = 0; j < symbol_count; j++) {
-        VarType *var_type = NULL;
-        safe_method_call(data->symbols, get, symbols[j], lengths[j], &var_type);
-        fprintf(out, ", %.*s", (int) lengths[j],
-                symbols[j]);
-        free((void *) symbols[j]);
-    }
-    free(lengths);
-    free(symbols);
-    fprintf(out, ")\n");
-    return ret;
-}
-
-char *CodeGen_Int(const void *this, void *state, FILE *out) {
-    CodegenState *cg_state = state;
-    const ASTNode *node = this;
-    ASTIntData *data = node->data;
-    char *ret;
-    safe_asprintf(&ret, "tmp%d", cg_state->tmp_count++);
-    print_indent(cg_state->indent, out);
-    fprintf(out, "void *%s = call(var_int);\n", ret);
-    print_indent(cg_state->indent, out);
-    fprintf(out, "((class%d*)%s)->val = %d;\n", INT, ret, data->val);
-    return ret;
-}
-
-char *CodeGen_Double(
-        UNUSED const void *this, UNUSED void *state, UNUSED FILE *out
-) {
-    CodegenState *cg_state = state;
-    const ASTNode *node = this;
-    ASTDoubleData *data = node->data;
-    char *ret;
-    safe_asprintf(&ret, "tmp%d", cg_state->tmp_count++);
-    print_indent(cg_state->indent, out);
-    fprintf(out, "void *%s = new_class%d(%f);\n", ret, DOUBLE, data->val);
-    return ret;
-}
-
-char *CodeGen_Variable(
-        const void *this, UNUSED void *state, UNUSED FILE *out
-) {
-    const ASTNode *node = this;
-    ASTVariableData *data = node->data;
-    return strdup(data->name);
-}
-
-char *CodeGen_TypedVar(
-        const void *this, UNUSED void *state, UNUSED FILE *out
-) {
-    const ASTNode *node = this;
-    ASTTypedVarData *data = node->data;
-    return strdup(data->name);
 }

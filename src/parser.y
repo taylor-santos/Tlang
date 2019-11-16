@@ -29,6 +29,7 @@
 
 %code requires {
     #include "ast.h"
+    #include "typechecker.h"
     #include "vector.h"
     #ifndef YY_TYPET_REF_YY_SCANNER_T
     #define YY_TYPET_REF_YY_SCANNER_T
@@ -41,16 +42,16 @@
 %define parse.lac full
 %define parse.trace
 %locations
-%parse-param { const ASTNode **root }
+%parse-param { const struct ASTNode **root }
 %param { const char *filename } { yyscan_t scanner }
 
 %union {
-    int       int_val;
-    double    double_val;
-    char      *str_val;
-    ASTNode   const *ast;
-    Vector    const *vec;
-    VarType   *type;
+    int                  int_val;
+    double               double_val;
+    char                 *str_val;
+    const struct ASTNode *ast;
+    const Vector         *vec;
+    struct VarType       *type;
 }
 
 %token T_INDENT    "indent"
