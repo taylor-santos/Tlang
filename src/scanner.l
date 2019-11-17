@@ -136,6 +136,9 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
             case T_IDENT:
                 printf("IDENT   (%s)\n", lval->str_val);
                 return 1;
+            case T_STRING:
+                printf("STRING  (%s)\n", lval->str_val);
+                return 1;
             case END:
                 printf("END OF FILE\n");
                 return 1;
@@ -287,6 +290,10 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
         char *val = NULL;
         asprintf(&val, "var_%s", yytext);
         push_token((Token){.type=T_IDENT,  .value.str_val=val});
+    }
+    [\"]([^"]|[\\].)*[\"] {
+        char *val = strndup(yytext + 1, strlen(yytext) - 2);
+        push_token((Token){.type=T_STRING, .value.str_val=val});
     }
 
     [ \t]+ // Ignore non-leading whitespace

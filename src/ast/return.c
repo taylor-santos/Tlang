@@ -79,7 +79,7 @@ static int GetType_Return(const ASTNode *node,
     }
     if (state->curr_ret_type == NULL) {
         state->curr_ret_type = *type_ptr;
-    } else if (typecmp(*type_ptr, state->curr_ret_type)) {
+    } else if (typecmp(*type_ptr, state->curr_ret_type, state)) {
         //TODO: Handle incompatible return statement
         fprintf(stderr, "error: incompatible return type\n");
         return 1;

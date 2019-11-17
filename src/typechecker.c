@@ -4,174 +4,126 @@
 #include "ast.h"
 #include "safe.h"
 #include "builtins.h"
+#include "ast/program.h"
 
-static int funccmp(const FuncType *type1, const FuncType *type2);
+static int funccmp(const FuncType *type1,
+                   const FuncType *type2,
+                   TypeCheckState *state);
 static int copy_FuncType(FuncType *type, FuncType **copy_ptr);
 static int copy_ClassType(ClassType *type, ClassType **copy_ptr);
 static int copy_ObjectType(ObjectType *type, ObjectType **copy_ptr);
 
-int getObjectID(VarType *type, const Map *symbols) {
-    switch (type->type) {
-        case OBJECT:;
-            ObjectType *object = type->object;
-            if (object->classID == -1 && object->className == NULL) {
-                return 1;
-            }
-            VarType *classType = NULL;
-            if (symbols->get(symbols,
-                             object->className,
-                             strlen(object->className),
-                             &classType)) {
-                return 1;
-            }
-            if (classType->type != CLASS) {
-                return 1;
-            }
-            object->classID = classType->class->classID;
-            object->def = classType->class->def;
-            break;
-        case CLASS:;
-            ClassType *class = type->class->def;
-            if (class == type->class) {
-                size_t      field_count = class->fields->size(class->fields);
-                for (size_t i           = 0; i < field_count; i++) {
-                    NamedType *field = NULL;
-                    safe_method_call(class->fields, get, i, &field);
-                    if (getObjectID(field->type, symbols)) {
-                        return 1;
-                    }
-                }
-            }
-            break;
-        case FUNCTION:;
-            FuncType *func = type->function;
-            size_t arg_count;
-            NamedType **args = NULL;
-            if (func->named_args->array(func->named_args, &arg_count, &args)) {
-                return 1;
-            }
-            for (size_t i = 0; i < arg_count; i++) {
-                if (getObjectID(args[i]->type, symbols)) {
-                    return 1;
-                }
-            }
-            free(args);
-            if (func->ret_type != NULL &&
-                getObjectID(func->ret_type, symbols)) {
-                return 1;
-            }
-            break;
-        case TUPLE:;
-            size_t type_count;
-            VarType **types = NULL;
-            if (type->tuple->array(type->tuple, &type_count, &types)) {
-                return 1;
-            }
-            for (size_t i = 0; i < type_count; i++) {
-                if (getObjectID(types[i], symbols)) {
-                    return 1;
-                }
-            }
-            free(types);
-            break;
-        case REFERENCE:
-        case PAREN:
-            if (getObjectID(type->sub_type, symbols)) {
-                return 1;
-            }
-            break;
-        case HOLD:
-            break;
-    }
-    return 0;
-}
-
-int add_builtins(const Map *symbols, const Vector *class_defs) {
-    if (symbols == NULL) {
-        return 1;
-    }
-    size_t n;
-    const char *binops[] = { "+", "=" };
-    n = sizeof(binops) / sizeof(*binops);
-
-    for (size_t i = 0; i < BUILTIN_COUNT; i++) {
-        VarType *class = NULL;
-        safe_function_call(new_ClassType, &class);
-        class->class->def = class->class;
-        class->class->stmts = new_Vector(0);
-        class->class->classID = i;
-        class->class->instance->object->classID = i;
-        ClassType *classType = class->class;
-        classType->def = classType;
-        classType->fields = new_Vector(0);
-        classType->field_names = new_Map(0, 0);
-
-        VarType *val_type = NULL;
-        safe_function_call(new_ObjectType, &val_type);
-        val_type->object->classID = i;
-        NamedType *val = NULL;
-        safe_function_call(new_NamedType, strdup("var_val"), val_type, &val);
-        safe_method_call(classType->fields, append, val);
-        safe_method_call(classType->field_names,
+int add_builtins(const ASTNode *node) {
+    ASTProgramData *data = node->data;
+    for (size_t classID = 0; classID < BUILTIN_COUNT; classID++) {
+        char *class_name = NULL;
+        safe_asprintf(&class_name, "var_%s", BUILTIN_NAMES[classID]);
+        safe_method_call(data->class_index,
                          put,
-                         "var_val",
-                         strlen("var_val"),
-                         val_type,
+                         class_name,
+                         strlen(class_name),
+                         (void*)classID,
                          NULL);
-
-        for (size_t j = 0; j < n; j++) {
-            VarType *arg_type = NULL;
-            safe_function_call(new_ObjectType, &arg_type);
-            arg_type->object->classID = i;
-            NamedType *arg = NULL;
-            safe_function_call(new_NamedType, strdup("other"), arg_type, &arg);
-            const Vector *args = new_Vector(0);
-            safe_method_call(args, append, arg);
-            VarType *ret_type = NULL;
-            safe_function_call(new_ObjectType, &ret_type);
-            ret_type->object->classID = i;
-            VarType *func = NULL;
-            safe_function_call(new_FuncType, args, ret_type, &func);
-            char *name;
-            asprintf(&name, "var_0x%X", binops[j][0]);
-            size_t len = strlen(binops[j]);
-            for (size_t k = 1; k < len; k++) {
-                append_string(&name, "%X", binops[j][k]);
+        ClassType *class_type = malloc(sizeof(*class_type));
+        if (class_type == NULL) {
+            print_ICE("unable to allocate memory");
+        }
+        class_type->classID = classID;
+        class_type->field_name_to_type = new_Map(0, 0);
+        {
+            VarType *object_type = malloc(sizeof(VarType));
+            if (object_type == NULL) {
+                print_ICE("unable to allocate memory");
             }
-            NamedType *field = NULL;
-            safe_function_call(new_NamedType, name, func, &field);
-            safe_method_call(classType->fields, append, field);
-            safe_method_call(classType->field_names,
+            object_type->type = OBJECT;
+            object_type->object = malloc(sizeof(ObjectType));
+            if (object_type->object == NULL) {
+                print_ICE("unable to allocate memory");
+            }
+            object_type->object->id_type = ID;
+            object_type->object->classID = classID;
+            safe_method_call(class_type->field_name_to_type,
                              put,
-                             field->name,
-                             strlen(field->name),
-                             func,
+                             "var_val",
+                             strlen("var_val"),
+                             object_type,
                              NULL);
         }
-        safe_method_call(class_defs, append, class);
-        char *name = NULL;
-        safe_asprintf(&name, "var_%s", BUILTIN_NAMES[i]);
-        safe_method_call(symbols, put, name, strlen(name), class, NULL);
-        free(name);
-    }
+        {
+            const Vector *args = new_Vector(0);
+            VarType *ret_type = NULL;
+            safe_function_call(new_ObjectType, &ret_type);
+            ret_type->object->id_type = NAME;
+            ret_type->object->name = strdup("var_string");
+            VarType *toString_type = NULL;
+            safe_function_call(new_FuncType, args, ret_type, &toString_type);
+            safe_method_call(class_type->field_name_to_type,
+                             put,
+                             "var_toString",
+                             strlen("var_toString"),
+                             toString_type,
+                             NULL);
+        }
 
-    const char *builtins[] = { "println" };
-    n = sizeof(builtins) / sizeof(*builtins);
-    for (size_t i = 0; i < n; i++) {
+        safe_method_call(data->class_types, append, class_type);
+        VarType *type_copy = malloc(sizeof(*type_copy));
+        type_copy->type = CLASS;
+        type_copy->class = class_type;
+        safe_method_call(data->symbols,
+                         put,
+                         class_name,
+                         strlen(class_name),
+                         type_copy,
+                         NULL);
+    }
+    {
+		char *trait_name = strdup("var_stringable");
+		size_t classID = data->class_types->size(data->class_types);
+        safe_method_call(data->class_index,
+                         put,
+                         trait_name,
+                         strlen(trait_name),
+                         (void*)classID,
+                         NULL);
+        ClassType *class_type = malloc(sizeof(*class_type));
+        if (class_type == NULL) {
+            print_ICE("unable to allocate memory");
+        }
+        class_type->classID = classID;
+        class_type->field_name_to_type = new_Map(0, 0);
+        const Vector *args = new_Vector(0);
+        VarType *ret_type = NULL;
+        safe_function_call(new_ObjectType, &ret_type);
+        ret_type->object->id_type = NAME;
+        ret_type->object->name = strdup("var_string");
+        VarType *func_type = NULL;
+        safe_function_call(new_FuncType, args, ret_type, &func_type);
+        char *name = "var_toString";
+        safe_method_call(class_type->field_name_to_type,
+                         put,
+                         name,
+                         strlen(name),
+                         func_type,
+                         NULL);
+        safe_method_call(data->class_types, append, class_type);
+    }
+    {
         VarType *arg_type = NULL;
         safe_function_call(new_ObjectType, &arg_type);
-        arg_type->object->className = strdup("var_int");
-        getObjectID(arg_type, symbols);
+        arg_type->object->id_type = NAME;
+        arg_type->object->name = strdup("var_stringable");
         NamedType *arg = NULL;
         safe_function_call(new_NamedType, strdup("var_val"), arg_type, &arg);
         const Vector *args = new_Vector(0);
         safe_method_call(args, append, arg);
-        VarType *func = NULL;
-        safe_function_call(new_FuncType, args, NULL, &func);
-        char *name = NULL;
-        safe_asprintf(&name, "var_%s", builtins[i]);
-        safe_method_call(symbols, put, name, strlen(name), func, NULL);
-        free(name);
+        VarType *func_type = NULL;
+        safe_function_call(new_FuncType, args, NULL, &func_type);
+        safe_method_call(data->symbols,
+                         put,
+                         "var_println",
+                         strlen("var_println"),
+                         func_type,
+                         NULL);
     }
     return 0;
 }
@@ -213,17 +165,11 @@ void free_FuncType(void *this) {
 
 void free_ClassType(void *this) {
     ClassType *type = this;
-    if (type->def == type) {
-        type->fields->free(type->fields, free_NamedType);
-        type->field_names->free(type->field_names, NULL);
-    }
-    free_VarType(type->instance);
+    type->field_name_to_type->free(type->field_name_to_type, free_VarType);
     free(this);
 }
 
 void free_ObjectType(void *this) {
-    ObjectType *type = this;
-    free(type->className);
     free(this);
 }
 
@@ -285,20 +231,18 @@ int new_ClassType(VarType **vartype_ptr) {
         return 1;
     }
     (*vartype_ptr)->type = CLASS;
+    (*vartype_ptr)->is_ref = 0;
     (*vartype_ptr)->class = malloc(sizeof(ClassType));
     if ((*vartype_ptr)->class == NULL) {
         free(*vartype_ptr);
         return 1;
     }
-    (*vartype_ptr)->class->def = NULL;
+    (*vartype_ptr)->class->field_name_to_type = new_Map(0, 0);
     (*vartype_ptr)->class->classID = -1;
     if (new_ObjectType(&(*vartype_ptr)->class->instance)) {
         free((*vartype_ptr)->class);
         free(*vartype_ptr);
-        return 1;
     }
-    (*vartype_ptr)->class->instance->object->classID = -1;
-    (*vartype_ptr)->is_ref = 0;
     return 0;
 }
 
@@ -316,8 +260,7 @@ int new_ObjectType(VarType **vartype_ptr) {
         free(*vartype_ptr);
         return 1;
     }
-    (*vartype_ptr)->object->classID = -1;
-    (*vartype_ptr)->object->className = NULL;
+    (*vartype_ptr)->object->id_type = -1;
     (*vartype_ptr)->is_ref = 0;
     return 0;
 }
@@ -404,26 +347,13 @@ void print_VarType(const void *this) {
                 print_VarType(type->sub_type);
                 break;
             case CLASS:
-                printf("class%ld: {", type->class->classID);
-                /*
-                if (type->class->classID < BUILTIN_COUNT) {
-                    printf("val:%s}", BUILTIN_NAMES[type->class->classID]);
-                } else {*/
-                ClassType *def = type->class->def;
-                size_t field_count = def->fields->size(def->fields);
-                sep = "";
-                for (size_t i = 0; i < field_count; i++) {
-                    NamedType *field = NULL;
-                    safe_method_call(def->fields, get, i, &field);
-                    printf("%s%s:", sep, field->name);
-                    print_VarType(field->type);
-                    sep = ", ";
-                }
-                printf("}");
-                //}
+                printf("class%d", type->class->classID);
                 break;
             case OBJECT:
-                printf("object%d", type->object->classID);
+                if (type->object->id_type == ID)
+                    printf("object%d", type->object->classID);
+                else
+                    printf("<%s>", type->object->name);
                 break;
             case TUPLE:
                 printf("(");
@@ -532,11 +462,11 @@ static int copy_ClassType(ClassType *type, ClassType **copy_ptr) {
         return 1;
     }
     (*copy_ptr)->classID = type->classID;
-    (*copy_ptr)->def = type->def;
-    if (copy_VarType(type->instance, &(*copy_ptr)->instance)) {
-        free(copy_ptr);
-        return 1;
-    }
+    safe_function_call(copy_VarType, type->instance, &(*copy_ptr)->instance);
+    safe_method_call(type->field_name_to_type,
+                     copy,
+                     &(*copy_ptr)->field_name_to_type,
+                     copy_VarType);
     return 0;
 }
 
@@ -548,37 +478,98 @@ static int copy_ObjectType(ObjectType *type, ObjectType **copy_ptr) {
     if (*copy_ptr == NULL) {
         return 1;
     }
-    (*copy_ptr)->classID = type->classID;
-    (*copy_ptr)->className = type->className == NULL
-                             ? NULL
-                             : strdup(type->className);
-    (*copy_ptr)->def = type->def;
-    return 0;
+    (*copy_ptr)->id_type = type->id_type;
+    switch(type->id_type) {
+        case ID:
+            (*copy_ptr)->classID = type->classID;
+            return 0;
+        case NAME:
+            (*copy_ptr)->name = strdup(type->name);
+            if ((*copy_ptr)->name == NULL) {
+                free(*copy_ptr);
+                return 1;
+            }
+            return 0;
+        default: print_ICE("ill-formed object type");
+    }
 }
 
-int classcmp(ClassType *type1, ClassType *type2) {
+int classcmp(ClassType *type1, ClassType *type2, UNUSED TypeCheckState *state) {
     if (type1 == type2) {
         return 0;
     }
-    size_t field2_count = type2->fields->size(type2->fields);
-    for (size_t i = 0; i < field2_count; i++) {
-        NamedType *field = NULL;
+    size_t field_count;
+    size_t *field_lengths = NULL;
+    char **fields = NULL;
+    safe_method_call(type2->field_name_to_type,
+            keys,
+            &field_count,
+            &field_lengths,
+            &fields);
+    int valid = 1;
+    size_t i;
+    for (i = 0; i < field_count; i++) {
         VarType *given_type = NULL;
-        safe_method_call(type2->fields, get, i, &field);
-        if (type1->field_names->get(type1->field_names,
-                                    field->name,
-                                    strlen(field->name),
-                                    &given_type)) {
-            return 1;
+        print_Map(type1->field_name_to_type, print_VarType);
+        if (type1->field_name_to_type->get(type1->field_name_to_type,
+                fields[i],
+                field_lengths[i],
+                &given_type)) {
+            valid = 0;
+            break;
         }
-        if (typecmp(given_type, field->type)) {
-            return 1;
+        VarType *expected_type = NULL;
+        safe_method_call(type2->field_name_to_type,
+                         get,
+                         fields[i],
+                         field_lengths[i],
+                         &expected_type);
+        if (typecmp(given_type, expected_type, state)) {
+            valid = 0;
+            break;
         }
+        free(fields[i]);
     }
-    return 0;
+    for (; i < field_count; i++) {
+        free(fields[i]);
+    }
+    free(field_lengths);
+    free(fields);
+    return !valid;
 }
 
-int typecmp(const VarType *type1, const VarType *type2) {
+int getClassTypeFromObject(ObjectType *obj,
+                           TypeCheckState *state,
+                           ClassType **class) {
+    ASTProgramData *data = state->program_node->data;
+    if (obj->id_type == ID) {
+        return data->class_types->get(data->class_types, obj->classID, class);
+    } else if (obj->id_type == NAME) {
+        size_t classID = -1;
+        if (data->class_index->get(data->class_index,
+                                   obj->name,
+                                   strlen(obj->name),
+                                   &classID)) {
+            return 1;
+        }
+        return data->class_types->get(data->class_types, classID, class);
+    } else {
+        print_ICE("ill-formed object type");
+    }
+}
+
+int objectcmp(ObjectType *type1,
+              ObjectType *type2,
+              UNUSED  TypeCheckState *state) {
+    ClassType *class1 = NULL, *class2 = NULL;
+    if (getClassTypeFromObject(type1, state, &class1) ||
+        getClassTypeFromObject(type2, state, &class2)) {
+        return 1;
+    }
+    return classcmp(class1, class2, state);
+}
+
+int typecmp(const VarType *type1, const VarType *type2, TypeCheckState *state) {
     //Returns 1 if the types differ, 0 if they match
     if (type1 == NULL || type2 == NULL) {
         return type1 != type2;
@@ -595,14 +586,14 @@ int typecmp(const VarType *type1, const VarType *type2) {
     }
     switch (type1->type) {
         case FUNCTION:
-            return funccmp(type1->function, type2->function);
+            return funccmp(type1->function, type2->function, state);
         case OBJECT:
-            return classcmp(type1->object->def, type2->object->def);
+            return objectcmp(type1->object, type2->object, state);
         case CLASS:
-            return classcmp(type1->class->def, type2->class->def);
+            return classcmp(type1->class, type2->class, state);
         case REFERENCE:
         case PAREN:
-            return typecmp(type1->sub_type, type1->sub_type);
+            return typecmp(type1->sub_type, type1->sub_type, state);
         case HOLD:
             return 0;
         case TUPLE:;
@@ -615,7 +606,7 @@ int typecmp(const VarType *type1, const VarType *type2) {
                 VarType *sub1 = NULL, *sub2 = NULL;
                 safe_method_call(type1->tuple, get, i, &sub1);
                 safe_method_call(type2->tuple, get, i, &sub2);
-                if (typecmp(sub1, sub2)) {
+                if (typecmp(sub1, sub2, state)) {
                     return 1;
                 }
             }
@@ -629,7 +620,9 @@ int typecmp(const VarType *type1, const VarType *type2) {
     return 1;
 }
 
-static int funccmp(const FuncType *type1, const FuncType *type2) {
+static int funccmp(const FuncType *type1,
+                   const FuncType *type2,
+                   TypeCheckState *state) {
     int ret = 0;
     size_t size1 = type1->named_args->size(type1->named_args),
            size2 = type2->named_args->size(type2->named_args);
@@ -641,11 +634,11 @@ static int funccmp(const FuncType *type1, const FuncType *type2) {
                       *arg2 = NULL;
             safe_method_call(type1->named_args, get, i, &arg1);
             safe_method_call(type2->named_args, get, i, &arg2);
-            if (typecmp(arg1->type, arg2->type)) {
+            if (typecmp(arg1->type, arg2->type, state)) {
                 ret = 1;
                 break;
             }
         }
     }
-    return ret || typecmp(type1->ret_type, type2->ret_type);
+    return ret || typecmp(type1->ret_type, type2->ret_type, state);
 }

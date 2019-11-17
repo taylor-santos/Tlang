@@ -14,7 +14,9 @@ struct ast_program_data {
     const Vector *statements;  // Vector<ASTNode*>
     const Map *symbols;        // Map<char*, VarType*>
     const Map *func_defs;      // Map<ASTNode*, int>
-    const Vector *class_defs;  // Vector<ASTNode*>
+    const Map *class_index;    // Map<char*, size_t>
+    const Vector *class_types; // Vector<ClassType>
+    const Vector *class_stmts; // Vector<Vector<ASTNode*>>
 };
 
 struct ast_program_vtable {

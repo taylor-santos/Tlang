@@ -57,7 +57,6 @@ static int GetType_Ref(const ASTNode *node,
     if (vtable->get_type(data->expr, symbols, state, &ref_type)) {
         return 1;
     }
-    getObjectID(ref_type, symbols);
     if (ref_type->type == REFERENCE) {
         //TODO: Handle reference to reference
         fprintf(stderr, "error: reference to reference not allowed\n");

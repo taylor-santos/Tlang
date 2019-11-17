@@ -97,18 +97,10 @@ static int parse_object(const Vector *exprs,
     }
     //Node might be a field
     int classID = (*vartype_ptr)->object->classID;
-    VarType *classType = NULL;
+    ClassType *class = NULL;
     const ASTProgramData *program_data = state->program_node->data;
-    if (classID < (int)BUILTIN_COUNT) {
-        safe_method_call(program_data->class_defs, get, classID, &classType);
-    } else {
-        const ASTNode *classNode = NULL;
-        safe_method_call(program_data->class_defs, get, classID, &classNode);
-        ASTStatementData *classData = classNode->data;
-        classType = classData->type;
-    }
-    ClassType *class = classType->class;
-    const Map *field_names = class->field_names;
+    safe_method_call(program_data->class_types, get, classID, &class);
+    const Map *field_names = class->field_name_to_type;
     if (field_names->get(field_names,
                          name,
                          strlen(name),
@@ -258,7 +250,7 @@ static int parse_function(const Vector *exprs,
             }
             NamedType *expected_type = NULL;
             safe_method_call(function->named_args, get, 0, &expected_type);
-            if (typecmp(given_type, expected_type->type)) {
+            if (typecmp(given_type, expected_type->type, state)) {
                 //TODO: Handle incompatible argument type
                 fprintf(stderr, "error: incompatible argument type\n");
                 return 1;
@@ -285,7 +277,7 @@ static int parse_function(const Vector *exprs,
                 safe_method_call(given_type->tuple, get, i, &arg_type);
                 NamedType *expected_type = NULL;
                 safe_method_call(function->named_args, get, i, &expected_type);
-                if (typecmp(arg_type, expected_type->type)) {
+                if (typecmp(arg_type, expected_type->type, state)) {
                     //TODO: Handle incompatible argument type
                     fprintf(stderr, "error: incompatible argument type\n");
                     return 1;

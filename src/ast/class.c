@@ -55,31 +55,24 @@ static void json_class(const void *this, int indent, FILE *out) {
 
 static int GetType_Class(const ASTNode *node,
                          const Map *symbols,
-                         TypeCheckState *typecheck_state,
+                         TypeCheckState *state,
                          VarType **type_ptr) {
     if (type_ptr == NULL) {
         return 1;
     }
     ASTClassData *data = node->data;
-
-    TypeCheckState *state = typecheck_state;
+    safe_function_call(new_ClassType, &data->type);
     const ASTNode *program_ast = state->program_node;
     ASTProgramData *program_data = program_ast->data;
-    int classID = program_data->class_defs->size(program_data->class_defs);
-    safe_function_call(new_ClassType, &data->type);
-    data->type->class->def = data->type->class;
-    data->type->class->stmts = data->stmts;
+    int classID = program_data->class_types->size(program_data->class_types);
     data->type->class->classID = classID;
+    data->type->class->instance->object->id_type = ID;
     data->type->class->instance->object->classID = classID;
-    data->type->class->fields = new_Vector(0);
-    data->type->class->field_names = new_Map(0, 0);
     *type_ptr = data->type;
-    safe_method_call(program_data->class_defs, append, node);
-
+    safe_method_call(program_data->class_types, append, data->type->class);
+    safe_method_call(program_data->class_stmts, append, data->stmts);
     const Vector *stmts = data->stmts;
-    size_t size = 0;
-    ASTNode **stmt_arr = NULL;
-    safe_method_call(stmts, array, &size, &stmt_arr);
+    size_t size = stmts->size(stmts);
     state->new_symbols->clear(state->new_symbols, free_NamedType);
     safe_method_call(symbols, copy, &data->symbols, copy_VarType);
     safe_method_call(data->symbols, copy, &data->env, copy_VarType);
@@ -97,75 +90,29 @@ static int GetType_Class(const ASTNode *node,
         free_VarType(prev_self);
     }
     for (size_t i = 0; i < size; i++) {
-        ASTStatementVTable *vtable = stmt_arr[i]->vtable;
+        const ASTNode *stmt = NULL;
+        safe_method_call(stmts, get, i, &stmt);
+        ASTStatementVTable *vtable = stmt->vtable;
         VarType *type = NULL;
-        if (vtable->get_type(stmt_arr[i],
+        if (vtable->get_type(stmt,
                              data->symbols,
-                             typecheck_state,
+                             state,
                              &type)) {
             return 1;
         }
     }
-    free(stmt_arr);
     size_t num_fields = state->new_symbols->size(state->new_symbols);
     for (size_t i = 0; i < num_fields; i++) {
         NamedType *field = NULL;
         safe_method_call(state->new_symbols, get, i, &field);
-        safe_method_call(data->type->class->fields, append, field);
-        safe_method_call(data->type->class->field_names,
+        VarType *type_copy = NULL;
+        safe_function_call(copy_VarType, field->type, &type_copy);
+        safe_method_call(data->type->class->field_name_to_type,
                          put,
                          field->name,
                          strlen(field->name),
-                         field->type,
+                         type_copy,
                          NULL);
-    }
-    size_t parent_count = data->inheritance->size(data->inheritance);
-    for (size_t i = 0; i < parent_count; i++) {
-        NamedType *parent_type = NULL;
-        safe_method_call(data->inheritance, get, i, &parent_type);
-        if (getObjectID(parent_type->type, symbols)) {
-            //TODO: Handle unrecognized parent type
-            fprintf(stderr, "error: class inherits from unrecognized type\n");
-            return 1;
-        }
-        if (parent_type->type->type != OBJECT) {
-            //TODO: Handle inheritance from non-class
-            fprintf(stderr, "error: class inherits from non-class\n");
-            return 1;
-        }
-        int parentID = parent_type->type->object->classID;
-        VarType *parent_class;
-        if (parentID < (int)BUILTIN_COUNT) {
-            safe_method_call(program_data->class_defs,
-                             get,
-                             parentID,
-                             &parent_class);
-        } else {
-            const ASTNode *parent_node = NULL;
-            program_data->class_defs->get(program_data->class_defs,
-                                          parentID,
-                                          &parent_node);
-            ASTStatementData *parent_data = parent_node->data;
-            parent_class = parent_data->type;
-        }
-        int field_count =
-                parent_class->class->fields->size(parent_class->class->fields);
-        for (int j = 0; j < field_count; j++) {
-            NamedType *field = NULL;
-            safe_method_call(parent_class->class->fields, get, j, &field);
-            if (!data->type->class->field_names->contains(
-                    data->type->class->field_names,
-                    field->name,
-                    strlen(field->name))) {
-                //TODO: Handle inherited field not initialized
-                fprintf(stderr, "error: field %s inherited from class %s "
-                                "not initialized\n",
-                        field->name+strlen("var_"),
-                        parent_type->type->object->className+strlen
-                                ("var_"));
-                return 1;
-            }
-        }
     }
     //Clear the new_symbols vector without freeing its elements. They have been
     //moved to the class's fields list.
@@ -184,7 +131,7 @@ static char *CodeGen_Class(const ASTNode *node,
     print_indent(state->indent, out);
     fprintf(out, "void *%s;\n", ret);
     print_indent(state->indent, out);
-    fprintf(out, "build_closure(%s, new_class%ld", ret, class->classID);
+    fprintf(out, "build_closure(%s, new_class%d", ret, class->classID);
     const char **symbols = NULL;
     size_t *lengths, symbol_count;
     safe_method_call(data->env, keys, &symbol_count, &lengths, &symbols);

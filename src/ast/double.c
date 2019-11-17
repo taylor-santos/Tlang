@@ -51,13 +51,6 @@ static int GetType_Double(UNUSED const ASTNode *node,
         return 1;
     }
     ASTDoubleData *data = node->data;
-    ASTProgramData *program_data = state->program_node->data;
-    VarType *type = NULL;
-    safe_method_call(program_data->class_defs,
-                     get,
-                     DOUBLE,
-                     &type);
-    data->type->object->def = type->class;
     *type_ptr = data->type;
     return 0;
 }
@@ -100,6 +93,7 @@ const ASTNode *new_DoubleNode(struct YYLTYPE *loc, double val) {
     }
     memcpy(data->loc, loc, sizeof(*loc));
     safe_function_call(new_ObjectType, &data->type);
+    data->type->object->id_type = ID;
     data->type->object->classID = DOUBLE;
     data->val                   = val;
     data->name                  = NULL;

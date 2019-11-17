@@ -65,7 +65,6 @@ static int GetType_Function(const ASTNode *node,
     ASTFunctionData *data = node->data;
     safe_method_call(symbols, copy, &data->symbols, copy_VarType);
     safe_method_call(data->symbols, copy, &data->env, copy_VarType);
-    safe_function_call(getObjectID, data->type, symbols);
     VarType *self_type = NULL;
     safe_function_call(copy_VarType, data->type, &self_type);
     VarType *prev_self = NULL;
@@ -112,8 +111,6 @@ static int GetType_Function(const ASTNode *node,
     size_t stmt_count = data->stmts->size(data->stmts);
     VarType *prev_ret_type = state->curr_ret_type;
     state->curr_ret_type = NULL;
-    print_Map(data->symbols, print_VarType);
-    printf("\n");
     for (size_t i = 0; i < stmt_count; i++) {
         ASTNode *stmt = NULL;
         safe_method_call(data->stmts, get, i, &stmt);
@@ -134,7 +131,9 @@ static int GetType_Function(const ASTNode *node,
         }
     } else {
         if (data->type->function->ret_type != NULL) {
-            if (typecmp(data->type->function->ret_type, state->curr_ret_type)) {
+            if (typecmp(data->type->function->ret_type,
+                        state->curr_ret_type,
+                        state)) {
                 //TODO: Handle incompatible return type
                 fprintf(stderr, "error: returned value has incompatible type "
                                 "to function signature\n");

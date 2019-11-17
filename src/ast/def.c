@@ -106,7 +106,7 @@ static int GetType_Def(const ASTNode *node,
                                    type_copy,
                                    &new_symbol);
                 safe_method_call(state->new_symbols, append, new_symbol);
-            } else if (typecmp(expected_type, prev_type)) {
+            } else if (typecmp(expected_type, prev_type, state)) {
                 //TODO: Handle incompatible type def
                 fprintf(stderr, "error: incompatible type reassignment\n");
                 return 1;
@@ -143,7 +143,7 @@ static int GetType_Def(const ASTNode *node,
                                type_copy,
                                &new_symbol);
             safe_method_call(state->new_symbols, append, new_symbol);
-        } else if (typecmp(expected_type, prev_type)) {
+        } else if (typecmp(expected_type, prev_type, state)) {
             //TODO: Handle incompatible type def
             fprintf(stderr, "error: incompatible type reassignment\n");
             return 1;

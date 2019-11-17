@@ -54,14 +54,9 @@ static int GetType_TypedVar(const ASTNode *node,
     }
     ASTTypedVarData *data = node->data;
     size_t len = strlen(data->name);
-    if (getObjectID(data->given_type, symbols)) {
-        //TODO: Handle invalid type name in variable type
-        fprintf(stderr, "error: invalid type name in variable type\n");
-        return 1;
-    }
     if (symbols->contains(symbols, data->name, len)) {
         safe_method_call(symbols, get, data->name, len, type_ptr);
-        if (typecmp(*type_ptr, data->given_type)) {
+        if (typecmp(*type_ptr, data->given_type, state)) {
             return 1;
         }
         data->type = *type_ptr;

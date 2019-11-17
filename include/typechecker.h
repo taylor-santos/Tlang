@@ -35,28 +35,28 @@ struct FuncType {
 };
 
 struct ClassType {
-    ClassType *def;
-    const Vector *stmts;    // Vector<const ASTNode*>
-    const Vector *fields;   // Vector<NamedType*>
-    const Map *field_names; // Map<char*, VarType*>
-    size_t classID;
+    const Map *field_name_to_type; // Map<char*, VarType*>
+    int classID;
     VarType *instance;
 };
 
 struct ObjectType {
-    int classID;
-    char *className;
-    ClassType *def;
+    enum { NAME, ID } id_type;
+    union {
+        char *name;
+        int classID;
+    };
 };
 
 typedef struct {
     const struct ASTNode *program_node;
     const Vector *new_symbols; //Vector<NamedType*>
+    const Vector *classTypes;  //Vector<ClassType*>
     VarType *curr_ret_type;
 } TypeCheckState;
 
-int add_builtins(const Map*, const Vector*);
-int typecmp(const VarType *type1, const VarType *type2);
+int add_builtins(const ASTNode *node);
+int typecmp(const VarType *type1, const VarType *type2, TypeCheckState *state);
 int copy_VarType(const void *type, const void *copy_ptr);
 void print_VarType(const void*);
 int getObjectID(VarType *type, const Map *symbols);

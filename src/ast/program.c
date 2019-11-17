@@ -17,7 +17,6 @@ static void free_program(const void *this) {
     data->statements->free(data->statements, free_ASTNode);
     data->symbols->free(data->symbols, free_VarType);
     data->func_defs->free(data->func_defs, free);
-    data->class_defs->free(data->class_defs, NULL);
     free(data->loc);
     free(node->data);
     free(node->vtable);
@@ -106,12 +105,14 @@ const ASTNode *new_ProgramNode(struct YYLTYPE *loc, const Vector *statements) {
         data->statements = new_Vector(0);
     }
     data->symbols      = new_Map(0, 0);
-    data->class_defs   = new_Vector(0);
-    safe_function_call(add_builtins, data->symbols, data->class_defs);
+    data->class_index  = new_Map(0, 0);
+    data->class_types  = new_Vector(0);
+    data->class_stmts  = new_Vector(0);
     data->func_defs    = new_Map(0, 0);
     vtable->free       = free_program;
     vtable->json       = json_program;
     vtable->type_check = TypeCheck_Program;
     vtable->codegen    = CodeGen_Program;
+    safe_function_call(add_builtins, node);
     return node;
 }

@@ -50,12 +50,7 @@ static int GetType_Variable(const ASTNode *node,
     ASTVariableData *data = node->data;
     size_t len = strlen(data->name);
     VarType *type = NULL;
-    if (!symbols->get(symbols, data->name, len, &type) && type) {
-        if (getObjectID(type, symbols)) {
-            //TODO: Handle failed to interpret class name
-            fprintf(stderr, "error: unable to infer type of variable\n");
-            return 1;
-        }
+    if (!symbols->get(symbols, data->name, len, &type)) {
         *type_ptr = type;
         safe_function_call(copy_VarType, type, &data->type);
         return 0;

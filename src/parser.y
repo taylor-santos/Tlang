@@ -1,7 +1,6 @@
 %{
     #include <stdio.h>
     #include <stdlib.h>
-    #include <string.h> // strdup()
     #include <stdarg.h>
     #include "Tlang_parser.h"
     #include "Tlang_scanner.h"
@@ -69,6 +68,7 @@
 %token<int_val>    T_INT "integer"
 %token<double_val> T_DOUBLE "double"
 %token<str_val>    T_IDENT "identifier"
+%token<str_val>    T_STRING "string"
 
 
 %type<ast>  File Return Statement Variable Expression SubExpr Value
@@ -288,6 +288,10 @@ Value:
     {
         $$ = new_DoubleNode(&@$, $1);
     }
+  | T_STRING
+    {
+        $$ = new_StringNode(&@$, $1);
+    }
 
 FuncType:
     T_FUNC OptArgTypes OptType
@@ -375,7 +379,8 @@ TypeDef:
     T_IDENT
     {
         new_ObjectType(&$$);
-        $$->object->className = $1;
+        $$->object->id_type = NAME;
+        $$->object->name = $1;
     }
   | FuncType
     {

@@ -64,6 +64,7 @@ const ASTNode *new_ParenNode(struct YYLTYPE *loc, const ASTNode *val);
 const ASTNode *new_ProgramNode(struct YYLTYPE *loc, const Vector *statements);
 const ASTNode *new_RefNode(struct YYLTYPE *loc, const ASTNode *expr);
 const ASTNode *new_ReturnNode(struct YYLTYPE *loc, const void *value);
+const ASTNode *new_StringNode(struct YYLTYPE *loc, char *value);
 const ASTNode *new_TupleNode(struct YYLTYPE *loc, const Vector *exprs);
 const ASTNode *new_TypedVarNode(struct YYLTYPE *loc,
                                 char *name,
