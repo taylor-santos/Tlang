@@ -7,6 +7,7 @@
 #include "ast/double.h"
 #include "builtins.h"
 #include "codegen.h"
+#include "ast/program.h"
 
 static void free_double(const void *this) {
     if (this == NULL) {
@@ -50,6 +51,13 @@ static int GetType_Double(UNUSED const ASTNode *node,
         return 1;
     }
     ASTDoubleData *data = node->data;
+    ASTProgramData *program_data = state->program_node->data;
+    VarType *type = NULL;
+    safe_method_call(program_data->class_defs,
+                     get,
+                     DOUBLE,
+                     &type);
+    data->type->object->def = type->class;
     *type_ptr = data->type;
     return 0;
 }

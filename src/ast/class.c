@@ -8,6 +8,7 @@
 #include "ast/program.h"
 #include "ast/statement.h"
 #include "codegen.h"
+#include "builtins.h"
 
 static void free_class(const void *this) {
     if (this == NULL) {
@@ -73,6 +74,7 @@ static int GetType_Class(const ASTNode *node,
     data->type->class->fields = new_Vector(0);
     data->type->class->field_names = new_Map(0, 0);
     *type_ptr = data->type;
+    safe_method_call(program_data->class_defs, append, node);
 
     const Vector *stmts = data->stmts;
     size_t size = 0;
@@ -132,12 +134,20 @@ static int GetType_Class(const ASTNode *node,
             return 1;
         }
         int parentID = parent_type->type->object->classID;
-        const ASTNode *parent_node = NULL;
-        program_data->class_defs->get(program_data->class_defs,
-                                      parentID,
-                                      &parent_node);
-        ASTStatementData *parent_data = parent_node->data;
-        VarType *parent_class = parent_data->type;
+        VarType *parent_class;
+        if (parentID < (int)BUILTIN_COUNT) {
+            safe_method_call(program_data->class_defs,
+                             get,
+                             parentID,
+                             &parent_class);
+        } else {
+            const ASTNode *parent_node = NULL;
+            program_data->class_defs->get(program_data->class_defs,
+                                          parentID,
+                                          &parent_node);
+            ASTStatementData *parent_data = parent_node->data;
+            parent_class = parent_data->type;
+        }
         int field_count =
                 parent_class->class->fields->size(parent_class->class->fields);
         for (int j = 0; j < field_count; j++) {
@@ -160,7 +170,6 @@ static int GetType_Class(const ASTNode *node,
     //Clear the new_symbols vector without freeing its elements. They have been
     //moved to the class's fields list.
     state->new_symbols->clear(state->new_symbols, NULL);
-    safe_method_call(program_data->class_defs, append, node);
     return 0;
 }
 

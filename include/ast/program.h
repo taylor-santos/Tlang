@@ -11,10 +11,10 @@ typedef struct ast_program_vtable ASTProgramVTable;
 
 struct ast_program_data {
     struct YYLTYPE *loc;
-    const Vector *statements; // Vector<ASTNode*>
-    const Map *symbols;    // Map<char*, VarType*>
-    const Map *func_defs;  // Map<ASTNode*, int>
-    const Vector *class_defs; // Vector<ASTNode*>
+    const Vector *statements;  // Vector<ASTNode*>
+    const Map *symbols;        // Map<char*, VarType*>
+    const Map *func_defs;      // Map<ASTNode*, int>
+    const Vector *class_defs;  // Vector<ASTNode*>
 };
 
 struct ast_program_vtable {

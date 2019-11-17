@@ -46,6 +46,7 @@ struct ClassType {
 struct ObjectType {
     int classID;
     char *className;
+    ClassType *def;
 };
 
 typedef struct {

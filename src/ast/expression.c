@@ -81,11 +81,11 @@ static int parse_object(const Vector *exprs,
                         TypeCheckState *state,
                         Expression **expr_ptr,
                         VarType **vartype_ptr) {
-    const ASTNode *node = NULL;
     size_t size = exprs->size(exprs);
     if (*index == size) {
         return 0;
     }
+    const ASTNode *node = NULL;
     safe_method_call(exprs, get, *index, &node);
     (*index)++;
     ASTStatementData *data = node->data;
@@ -150,27 +150,34 @@ static int parse_paren(const Vector *exprs,
     ASTExpressionData *sub_data = sub_node->data;
     const Vector *sub_exprs = sub_data->exprs;
 
-    const ASTNode *curr_expr = NULL;
-    safe_method_call(sub_exprs, get, 0, &curr_expr);
-    ASTStatementVTable *vtable = curr_expr->vtable;
-    if (vtable->get_type(curr_expr,
+    const ASTNode *first_node = NULL;
+    safe_method_call(sub_exprs, get, 0, &first_node);
+    ASTStatementVTable *vtable = first_node->vtable;
+    if (vtable->get_type(first_node,
                          symbols,
                          state,
                          vartype_ptr)) {
         return 1;
     }
     size_t sub_index = 1;
-    if (parse_expression(exprs,
+    (*expr_ptr)->expr_type = EXPR_PAREN;
+    (*expr_ptr)->sub_expr = malloc(sizeof(Expression));
+    if ((*expr_ptr)->sub_expr == NULL) {
+        print_ICE("unable to allocate memory");
+    }
+    (*expr_ptr)->sub_expr->expr_type = EXPR_VAR;
+    (*expr_ptr)->sub_expr->node = first_node;
+    (*expr_ptr)->sub_expr->type = *vartype_ptr;
+    (*expr_ptr)->type = *vartype_ptr;
+    if (parse_expression(sub_exprs,
                          &sub_index,
                          symbols,
                          state,
-                         expr_ptr,
+                         &(*expr_ptr)->sub_expr,
                          vartype_ptr)) {
         return 1;
     }
     data->type = *vartype_ptr;
-    (*expr_ptr)->node = sub_node;
-    (*index)++;
     if (parse_expression(exprs,
                          index,
                          symbols,
@@ -191,11 +198,14 @@ static int parse_function(const Vector *exprs,
     if (*expr_ptr == NULL) {
         print_ICE("unable to allocate memory");
     }
-    Expression *obj = malloc(sizeof(*obj));
-    obj->expr_type = EXPR_FUNC;
-    obj->sub_expr  = *expr_ptr;
-    safe_method_call(exprs, get, *index-1, &obj->node);
-    *expr_ptr = obj;
+    Expression *expr = malloc(sizeof(*expr));
+    if (expr == NULL) {
+        print_ICE("unable to allocate memory");
+    }
+    expr->expr_type = EXPR_FUNC;
+    expr->sub_expr = *expr_ptr;
+    *expr_ptr = expr;
+
     size_t size = exprs->size(exprs);
     FuncType *function = (*vartype_ptr)->function;
     size_t arg_count = function->named_args->size(function->named_args);
@@ -214,13 +224,16 @@ static int parse_function(const Vector *exprs,
         }
         (*index)++;
         if (given_type->type == HOLD) {
+            (*expr_ptr)->expr_type = EXPR_HOLD;
             return 0;
         }
         (*expr_ptr)->arg = malloc(sizeof(Expression));
         if ((*expr_ptr)->arg == NULL) {
             print_ICE("unable to allocate memory");
         }
+        (*expr_ptr)->arg->expr_type = EXPR_VAR;
         (*expr_ptr)->arg->node = next_expr;
+        (*expr_ptr)->arg->type = given_type;
         if (parse_expression(exprs,
                              index,
                              symbols,
@@ -287,12 +300,15 @@ static int parse_function(const Vector *exprs,
             safe_method_call(exprs, get, *index, &next_expr);
             ASTStatementData *data = next_expr->data;
             if (data->is_hold) {
+                (*expr_ptr)->expr_type = EXPR_HOLD;
+                (*expr_ptr)->type = *vartype_ptr;
                 (*index)++;
                 return 0; // Return without evaluating return type of function
             }
         }
     }
     *vartype_ptr = function->ret_type;
+    (*expr_ptr)->type = *vartype_ptr;
     return 0;
 }
 
@@ -418,8 +434,12 @@ static int GetType_Expression(const ASTNode *node,
     }
     size_t index = 1;
     data->expr_node = malloc(sizeof(*data->expr_node));
-    data->expr_node->expr_type = EXPR_VAR;
+    if (data->expr_node == NULL) {
+        print_ICE("unable to allocate memory");
+    }
     data->expr_node->node = first_node;
+    data->expr_node->type = *type_ptr;
+    data->expr_node->expr_type = EXPR_VAR;
     if (parse_expression(exprs,
                          &index,
                          symbols,
@@ -437,7 +457,6 @@ char *gen_expression(Expression *expr, CodegenState *state, FILE *out) {
     char *tmp = NULL, *sub_expr = NULL;
     const ASTNode *node = NULL;
     ASTStatementVTable *vtable = NULL;
-    ASTStatementData *data = NULL;
     switch (expr->expr_type) {
         case EXPR_VAR:
             node = expr->node;
@@ -447,9 +466,7 @@ char *gen_expression(Expression *expr, CodegenState *state, FILE *out) {
             asprintf(&tmp, "tmp%d", state->tmp_count++);
             sub_expr = gen_expression(expr->sub_expr, state, out);
             print_indent(state->indent, out);
-            node = expr->sub_expr->node;
-            data = node->data;
-            int classID = data->type->object->classID;
+            int classID = expr->sub_expr->type->object->classID;
             fprintf(out,
                     "void *%s = ((class%d*)%s)->%s;\n",
                     tmp,
@@ -474,10 +491,17 @@ char *gen_expression(Expression *expr, CodegenState *state, FILE *out) {
             print_indent(state->indent, out);
             fprintf(out, "void *%s = call(%s", tmp, func);
             if (expr->arg != NULL) {
-                fprintf(out, ", %s", arg);
+                fprintf(out, ", ");
+                if (expr->arg->type->is_ref) {
+                    fprintf(out, "*(void**)");
+                }
+                fprintf(out, "%s", arg);
             }
             fprintf(out, ");\n");
             return tmp;
+        case EXPR_PAREN:
+        case EXPR_HOLD:
+            return gen_expression(expr->sub_expr, state, out);
     }
     fprintf(stderr, "error: unmatched expression\n");
     return NULL;

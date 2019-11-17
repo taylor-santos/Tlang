@@ -10,6 +10,7 @@ const Stack *indent_stack;
 const Queue *tok_queue;
 YYLTYPE save_loc = { 0 };
 int indent = 0;
+int comment_depth = 0;
 enum { NOT_SET, SPACES, TABS } indent_type = NOT_SET;
 
 typedef struct token {
@@ -92,7 +93,6 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
         *lval = t->value;
         *loc  = t->loc;
         free(t);
-        /*
         switch(*type) {
             case T_NEWLINE:
                 printf("NEWLINE\n");
@@ -141,7 +141,6 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
                 return 1;
         }
         printf("LITERAL (%c)\n", *type);
-         */
         return 1;
     }
     return 0;
@@ -156,7 +155,7 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
 %option yylineno
 %option noyywrap
 
-%x normal
+%x normal comment
 
 %%
 
@@ -167,10 +166,15 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
     }
 %}
 
+^[ \t]*[\n\r]+                             // Ignore empty lines
 
-^[ \t]*[\n\r]+          // Ignore empty lines
-^[ \t]*[/]{2}.*[\n\r]+  // Ignore lines with just comments
-
+<INITIAL,normal>{
+    [ \t]*[/]{2}.*[\n\r]+  // Ignore lines with just comments
+    [ \t]*[/][\*] {
+        comment_depth++;
+        BEGIN(comment);
+    }
+}
 ^" "+\t {
     yyerror(yylloc, NULL, filename, yyscanner,
         "inconsistent use of tabs and spaces in indentation");
@@ -204,7 +208,7 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
     indent += yyleng;
 }
 
-<<EOF>> {
+<INITIAL,normal><<EOF>> {
     int *top_indent = NULL;
     if (tok_queue->size(tok_queue) > 0) {
         Token *tok;
@@ -232,15 +236,35 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
     if (handle_indentation(indent)) {
         indent = 0;
         yyerror(yylloc, NULL, filename, yyscanner,
-            "indentation does not match any outer indentation level");
+            "indentation does not match any previous indentation level");
         return T_ERROR;
     }
     indent = 0;
 }
 
+<comment>{
+    "/*" {
+        comment_depth++;
+    }
+    "*/"[ \t]*[\n\r] {
+        comment_depth--;
+        if (comment_depth == 0) BEGIN(INITIAL);
+    }
+    "*/"[ \t]* {
+        comment_depth--;
+        if (comment_depth == 0) BEGIN(normal);
+    }
+    .|[\n\r]
+    <<EOF>> {
+        yyerror(yylloc, NULL, filename, yyscanner,
+           "end of file encountered inside comment block");
+        return T_ERROR;
+    }
+}
+
 <normal>{
-    [/]{2}.*                // Ignore comments
-    [\\][ \t]*[\n\r]+[ \t]* // Ignore escaped newlines
+    [/]{2}.*                  // Ignore comments
+    [\\][ \t]*[\n\r]+[ \t]*   // Ignore escaped newlines
 
     func   { push_token((Token){.type=T_FUNC}); }
     return { push_token((Token){.type=T_RETURN}); }

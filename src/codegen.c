@@ -90,6 +90,11 @@ static void define_builtins(FILE *out) {
 
 static int define_classes(CodegenState *state, FILE *out) {
     size_t count = state->class_defs->size(state->class_defs);
+    fprintf(out, "/* Forward Declare Constructors */\n");
+    for (size_t i = 0; i < count; i++) {
+        fprintf(out, "void *new_class%ld(closure *c);\n", i);
+    }
+    fprintf(out, "\n");
     fprintf(out, "/* Define Classes */\n");
     for (size_t i = 0; i < count; i++) {
         VarType *type = NULL;
@@ -146,12 +151,15 @@ static int define_classes(CodegenState *state, FILE *out) {
                              &env_lengths,
                              &env);
             for (size_t j = 0; j < env_count; j++) {
-                print_indent(1, out);
-                fprintf(out,
-                        "#define %.*s c->env[%ld]\n",
-                        (int) env_lengths[j],
-                        env[j],
-                        j);
+                if (env_lengths[j] != strlen("var_self") ||
+                    strncmp(env[j], "var_self", env_lengths[j])) {
+                    print_indent(1, out);
+                    fprintf(out,
+                            "#define %.*s c->env[%ld]\n",
+                            (int) env_lengths[j],
+                            env[j],
+                            j);
+                }
             }
             size_t stmt_count = class->stmts->size(class->stmts);
             for (size_t j = 0; j < stmt_count; j++) {

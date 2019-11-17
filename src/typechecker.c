@@ -14,7 +14,7 @@ int getObjectID(VarType *type, const Map *symbols) {
     switch (type->type) {
         case OBJECT:;
             ObjectType *object = type->object;
-            if (object->className == NULL || object->classID != -1) {
+            if (object->classID == -1 && object->className == NULL) {
                 return 1;
             }
             VarType *classType = NULL;
@@ -28,6 +28,7 @@ int getObjectID(VarType *type, const Map *symbols) {
                 return 1;
             }
             object->classID = classType->class->classID;
+            object->def = classType->class->def;
             break;
         case CLASS:;
             ClassType *class = type->class->def;
@@ -104,6 +105,20 @@ int add_builtins(const Map *symbols, const Vector *class_defs) {
         classType->def = classType;
         classType->fields = new_Vector(0);
         classType->field_names = new_Map(0, 0);
+
+        VarType *val_type = NULL;
+        safe_function_call(new_ObjectType, &val_type);
+        val_type->object->classID = i;
+        NamedType *val = NULL;
+        safe_function_call(new_NamedType, strdup("var_val"), val_type, &val);
+        safe_method_call(classType->fields, append, val);
+        safe_method_call(classType->field_names,
+                         put,
+                         "var_val",
+                         strlen("var_val"),
+                         val_type,
+                         NULL);
+
         for (size_t j = 0; j < n; j++) {
             VarType *arg_type = NULL;
             safe_function_call(new_ObjectType, &arg_type);
@@ -145,9 +160,10 @@ int add_builtins(const Map *symbols, const Vector *class_defs) {
     for (size_t i = 0; i < n; i++) {
         VarType *arg_type = NULL;
         safe_function_call(new_ObjectType, &arg_type);
-        arg_type->object->classID = INT;
+        arg_type->object->className = strdup("var_int");
+        getObjectID(arg_type, symbols);
         NamedType *arg = NULL;
-        safe_function_call(new_NamedType, strdup("val"), arg_type, &arg);
+        safe_function_call(new_NamedType, strdup("var_val"), arg_type, &arg);
         const Vector *args = new_Vector(0);
         safe_method_call(args, append, arg);
         VarType *func = NULL;
@@ -536,6 +552,29 @@ static int copy_ObjectType(ObjectType *type, ObjectType **copy_ptr) {
     (*copy_ptr)->className = type->className == NULL
                              ? NULL
                              : strdup(type->className);
+    (*copy_ptr)->def = type->def;
+    return 0;
+}
+
+int classcmp(ClassType *type1, ClassType *type2) {
+    if (type1 == type2) {
+        return 0;
+    }
+    size_t field2_count = type2->fields->size(type2->fields);
+    for (size_t i = 0; i < field2_count; i++) {
+        NamedType *field = NULL;
+        VarType *given_type = NULL;
+        safe_method_call(type2->fields, get, i, &field);
+        if (type1->field_names->get(type1->field_names,
+                                    field->name,
+                                    strlen(field->name),
+                                    &given_type)) {
+            return 1;
+        }
+        if (typecmp(given_type, field->type)) {
+            return 1;
+        }
+    }
     return 0;
 }
 
@@ -558,9 +597,9 @@ int typecmp(const VarType *type1, const VarType *type2) {
         case FUNCTION:
             return funccmp(type1->function, type2->function);
         case OBJECT:
-            return type1->object->classID != type2->object->classID;
+            return classcmp(type1->object->def, type2->object->def);
         case CLASS:
-            return type1->class->classID != type2->class->classID;
+            return classcmp(type1->class->def, type2->class->def);
         case REFERENCE:
         case PAREN:
             return typecmp(type1->sub_type, type1->sub_type);

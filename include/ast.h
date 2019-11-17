@@ -11,14 +11,15 @@
 typedef struct expr_node Expression;
 struct expr_node {
     enum {
-        EXPR_VAR, EXPR_FIELD, EXPR_CONS, EXPR_FUNC
+        EXPR_VAR, EXPR_FIELD, EXPR_CONS, EXPR_FUNC, EXPR_PAREN, EXPR_HOLD
     } expr_type;
     Expression *sub_expr;
     union {
         char *name;
         Expression *arg;
     };
-    const void *node;
+    const struct ASTNode *node;
+    struct VarType *type;
 };
 
 void json_ASTNode(const void *this, int indent, FILE *out);

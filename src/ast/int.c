@@ -7,6 +7,7 @@
 #include "ast/int.h"
 #include "builtins.h"
 #include "codegen.h"
+#include "ast/program.h"
 
 static void free_int(const void *this) {
     if (this == NULL) {
@@ -50,6 +51,13 @@ static int GetType_Int(UNUSED const ASTNode *node,
         return 1;
     }
     ASTIntData *data = node->data;
+    ASTProgramData *program_data = state->program_node->data;
+    VarType *type = NULL;
+    safe_method_call(program_data->class_defs,
+                     get,
+                     INT,
+                     &type);
+    data->type->object->def = type->class;
     *type_ptr = data->type;
     return 0;
 }
