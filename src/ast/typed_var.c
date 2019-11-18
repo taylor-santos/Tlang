@@ -56,7 +56,7 @@ static int GetType_TypedVar(const ASTNode *node,
     size_t len = strlen(data->name);
     if (symbols->contains(symbols, data->name, len)) {
         safe_method_call(symbols, get, data->name, len, type_ptr);
-        if (typecmp(*type_ptr, data->given_type, state)) {
+        if (typecmp(*type_ptr, data->given_type, state, NULL)) {
             return 1;
         }
         data->type = *type_ptr;

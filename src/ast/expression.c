@@ -96,9 +96,13 @@ static int parse_object(const Vector *exprs,
         return 1;
     }
     //Node might be a field
-    int classID = (*vartype_ptr)->object->classID;
+    ASTProgramData *program_data = state->program_node->data;
+    size_t classID;
+    safe_function_call(getClassID,
+                       (*vartype_ptr)->object,
+                       &classID,
+                       program_data->class_index);
     ClassType *class = NULL;
-    const ASTProgramData *program_data = state->program_node->data;
     safe_method_call(program_data->class_types, get, classID, &class);
     const Map *field_names = class->field_name_to_type;
     if (field_names->get(field_names,
@@ -114,6 +118,7 @@ static int parse_object(const Vector *exprs,
     expr->expr_type = EXPR_FIELD;
     expr->sub_expr = *expr_ptr;
     expr->name = name;
+    expr->type = data->type;
     safe_method_call(exprs, get, *index-1, &expr->node);
 
     *expr_ptr = expr;
@@ -250,7 +255,7 @@ static int parse_function(const Vector *exprs,
             }
             NamedType *expected_type = NULL;
             safe_method_call(function->named_args, get, 0, &expected_type);
-            if (typecmp(given_type, expected_type->type, state)) {
+            if (typecmp(given_type, expected_type->type, state, NULL)) {
                 //TODO: Handle incompatible argument type
                 fprintf(stderr, "error: incompatible argument type\n");
                 return 1;
@@ -277,7 +282,7 @@ static int parse_function(const Vector *exprs,
                 safe_method_call(given_type->tuple, get, i, &arg_type);
                 NamedType *expected_type = NULL;
                 safe_method_call(function->named_args, get, i, &expected_type);
-                if (typecmp(arg_type, expected_type->type, state)) {
+                if (typecmp(arg_type, expected_type->type, state, NULL)) {
                     //TODO: Handle incompatible argument type
                     fprintf(stderr, "error: incompatible argument type\n");
                     return 1;
@@ -324,6 +329,7 @@ static int parse_class(const Vector *exprs,
     Expression *expr = malloc(sizeof(*expr));
     expr->expr_type = EXPR_CONS;
     expr->sub_expr = *expr_ptr;
+    expr->type = *vartype_ptr;
     safe_method_call(exprs, get, *index-1, &expr->node);
     *expr_ptr = expr;
     return 0;
@@ -458,9 +464,13 @@ char *gen_expression(Expression *expr, CodegenState *state, FILE *out) {
             asprintf(&tmp, "tmp%d", state->tmp_count++);
             sub_expr = gen_expression(expr->sub_expr, state, out);
             print_indent(state->indent, out);
-            int classID = expr->sub_expr->type->object->classID;
+            size_t classID;
+            safe_function_call(getClassID,
+                               expr->sub_expr->type->object,
+                               &classID,
+                               state->class_index);
             fprintf(out,
-                    "void *%s = ((class%d*)%s)->%s;\n",
+                    "void *%s = ((class%ld*)%s)->%s;\n",
                     tmp,
                     classID,
                     sub_expr,

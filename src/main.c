@@ -104,7 +104,7 @@ int main(int argc, char *argv[]) {
             if (!vtable->type_check(AST)) {
                 ASTProgramData *data = AST->data;
                 print_Map(data->symbols, print_VarType);
-                //GenerateCode(AST, output);
+                GenerateCode(AST, output);
             } else {
                 printf("Type checker failed!\n");
             }

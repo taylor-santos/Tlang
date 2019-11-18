@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include <ast/program.h>
 #include "ast.h"
 #include "typechecker.h"
 #include "safe.h"
@@ -106,7 +107,17 @@ static int GetType_Def(const ASTNode *node,
                                    type_copy,
                                    &new_symbol);
                 safe_method_call(state->new_symbols, append, new_symbol);
-            } else if (typecmp(expected_type, prev_type, state)) {
+                if ((*type_ptr)->type == CLASS) {
+                    size_t classID = (*type_ptr)->class->classID;
+                    ASTProgramData *program_data = state->program_node->data;
+                    safe_method_call(program_data->class_index,
+                                     put,
+                                     lhs_data->name,
+                                     strlen(lhs_data->name),
+                                     (void*)classID,
+                                     NULL);
+                }
+            } else if (typecmp(expected_type, prev_type, state, NULL)) {
                 //TODO: Handle incompatible type def
                 fprintf(stderr, "error: incompatible type reassignment\n");
                 return 1;
@@ -124,10 +135,10 @@ static int GetType_Def(const ASTNode *node,
         ASTLExprData *lhs_data = lhs_node->data;
         VarType *prev_type = NULL;
         VarType *expected_type = *type_ptr;
-        if (symbols->get(symbols,
+        /*if (symbols->get(symbols,
                          lhs_data->name,
                          strlen(lhs_data->name),
-                         &prev_type)) {
+                         &prev_type)) {*/
             VarType *type_copy = NULL;
             safe_function_call(copy_VarType, expected_type, &type_copy);
             safe_method_call(symbols,
@@ -135,7 +146,7 @@ static int GetType_Def(const ASTNode *node,
                              lhs_data->name,
                              strlen(lhs_data->name),
                              type_copy,
-                             NULL);
+                             &prev_type); //NULL
             safe_function_call(copy_VarType, expected_type, &type_copy);
             NamedType *new_symbol = NULL;
             safe_function_call(new_NamedType,
@@ -143,11 +154,22 @@ static int GetType_Def(const ASTNode *node,
                                type_copy,
                                &new_symbol);
             safe_method_call(state->new_symbols, append, new_symbol);
-        } else if (typecmp(expected_type, prev_type, state)) {
+            if ((*type_ptr)->type == CLASS) {
+                size_t classID = (*type_ptr)->class->classID;
+                ASTProgramData *program_data = state->program_node->data;
+                size_t prevID;
+                safe_method_call(program_data->class_index,
+                                 put,
+                                 lhs_data->name,
+                                 strlen(lhs_data->name),
+                                 (void*)classID,
+                                 &prevID);
+            }
+        /*} else if (typecmp(expected_type, prev_type, state)) {
             //TODO: Handle incompatible type def
             fprintf(stderr, "error: incompatible type reassignment\n");
             return 1;
-        }
+        }*/
     }
 
     data->type = *type_ptr;

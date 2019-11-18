@@ -38,6 +38,7 @@ struct ClassType {
     const Map *field_name_to_type; // Map<char*, VarType*>
     int classID;
     VarType *instance;
+    const Vector *supers;
 };
 
 struct ObjectType {
@@ -56,10 +57,13 @@ typedef struct {
 } TypeCheckState;
 
 int add_builtins(const ASTNode *node);
-int typecmp(const VarType *type1, const VarType *type2, TypeCheckState *state);
+int typecmp(const VarType *type1,
+            const VarType *type2,
+            TypeCheckState *state,
+            const Map *seen);
 int copy_VarType(const void *type, const void *copy_ptr);
 void print_VarType(const void*);
-int getObjectID(VarType *type, const Map *symbols);
+int getClassID(ObjectType *object, size_t *id_ptr, const Map *class_index);
 
 void free_VarType(void*);
 void free_FuncType(void*);

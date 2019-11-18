@@ -44,14 +44,18 @@ static void json_stringnode(const void *this, int indent, FILE *out) {
 }
 
 static int GetType_String(UNUSED const ASTNode *node,
-                          UNUSED const Map *symbols,
+                          const Map *symbols,
                           UNUSED TypeCheckState *state,
                           VarType **type_ptr) {
     if (type_ptr == NULL) {
         return 1;
     }
-    ASTStringData *data = node->data;
-    *type_ptr = data->type;
+    char *name = NULL;
+    safe_asprintf(&name, "var_%s", BUILTIN_NAMES[STRING]);
+    VarType *class_type = NULL;
+    safe_method_call(symbols, get, name, strlen(name), &class_type);
+    *type_ptr = class_type->class->instance;
+    free(name);
     return 0;
 }
 
@@ -65,7 +69,7 @@ static char *CodeGen_String(const ASTNode *node,
     fprintf(out, "void *%s = call(var_string);\n", ret);
     print_indent(state->indent, out);
     fprintf(out,
-            "((class%d*)%s)->val = strdup(%s);\n",
+            "((class%d*)%s)->val = strdup(\"%s\");\n",
             STRING,
             ret,
             data->val);

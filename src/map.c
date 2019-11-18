@@ -32,7 +32,7 @@ void print_Map(const Map *this, void (*printer)(const void *)) {
             const void *val = curr->value;
             printf("%s", sep);
             printf("\"%.*s\": \"", (int) curr->len, (char *) curr->key);
-            printer(val);
+            if (printer) printer(val);
             printf("\"");
             sep = ",\n  ";
         }

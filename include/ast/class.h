@@ -14,10 +14,10 @@ struct ast_class_data {
     VarType *type;
     char *name;
     int is_hold;
-    const Vector *inheritance;
+    const Vector *supers; // Vector<NamedType*>
     const Vector *stmts;
     const Map *symbols;
-    const Map *env;     // Map<char*, int>
+    const Map *env;       // Map<char*, int>
     const Map *fields;
 };
 

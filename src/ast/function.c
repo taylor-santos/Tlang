@@ -133,7 +133,8 @@ static int GetType_Function(const ASTNode *node,
         if (data->type->function->ret_type != NULL) {
             if (typecmp(data->type->function->ret_type,
                         state->curr_ret_type,
-                        state)) {
+                        state,
+                        NULL)) {
                 //TODO: Handle incompatible return type
                 fprintf(stderr, "error: returned value has incompatible type "
                                 "to function signature\n");

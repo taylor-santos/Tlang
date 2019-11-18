@@ -8,7 +8,8 @@
 
 static int funccmp(const FuncType *type1,
                    const FuncType *type2,
-                   TypeCheckState *state);
+                   TypeCheckState *state,
+                   const Map *seen);
 static int copy_FuncType(FuncType *type, FuncType **copy_ptr);
 static int copy_ClassType(ClassType *type, ClassType **copy_ptr);
 static int copy_ObjectType(ObjectType *type, ObjectType **copy_ptr);
@@ -30,16 +31,13 @@ int add_builtins(const ASTNode *node) {
         }
         class_type->classID = classID;
         class_type->field_name_to_type = new_Map(0, 0);
+        class_type->supers = new_Vector(0);
+        safe_function_call(new_ObjectType, &class_type->instance);
+        class_type->instance->object->id_type = ID;
+        class_type->instance->object->classID = classID;
         {
-            VarType *object_type = malloc(sizeof(VarType));
-            if (object_type == NULL) {
-                print_ICE("unable to allocate memory");
-            }
-            object_type->type = OBJECT;
-            object_type->object = malloc(sizeof(ObjectType));
-            if (object_type->object == NULL) {
-                print_ICE("unable to allocate memory");
-            }
+            VarType *object_type = NULL;
+            if (new_ObjectType(&object_type)) return 1;
             object_type->object->id_type = ID;
             object_type->object->classID = classID;
             safe_method_call(class_type->field_name_to_type,
@@ -75,6 +73,12 @@ int add_builtins(const ASTNode *node) {
                          strlen(class_name),
                          type_copy,
                          NULL);
+        safe_method_call(data->class_stmts,
+                         append,
+                         new_Vector(0));
+        safe_method_call(data->class_envs,
+                         append,
+                         new_Map(0, 0));
     }
     {
 		char *trait_name = strdup("var_stringable");
@@ -91,6 +95,7 @@ int add_builtins(const ASTNode *node) {
         }
         class_type->classID = classID;
         class_type->field_name_to_type = new_Map(0, 0);
+        class_type->supers = new_Vector(0);
         const Vector *args = new_Vector(0);
         VarType *ret_type = NULL;
         safe_function_call(new_ObjectType, &ret_type);
@@ -106,6 +111,12 @@ int add_builtins(const ASTNode *node) {
                          func_type,
                          NULL);
         safe_method_call(data->class_types, append, class_type);
+        safe_method_call(data->class_stmts,
+                         append,
+                         new_Vector(0));
+        safe_method_call(data->class_envs,
+                         append,
+                         new_Map(0, 0));
     }
     {
         VarType *arg_type = NULL;
@@ -126,6 +137,20 @@ int add_builtins(const ASTNode *node) {
                          NULL);
     }
     return 0;
+}
+
+int getClassID(ObjectType *object, size_t *id_ptr, const Map *class_index) {
+    if (object->id_type == ID) {
+        *id_ptr = object->classID;
+        return 0;
+    } else if (object->id_type == NAME) {
+        return class_index->get(class_index,
+                                object->name,
+                                strlen(object->name),
+                                id_ptr);
+    } else {
+        print_ICE("ill-formed object type");
+    }
 }
 
 void free_VarType(void *this) {
@@ -243,6 +268,7 @@ int new_ClassType(VarType **vartype_ptr) {
         free((*vartype_ptr)->class);
         free(*vartype_ptr);
     }
+    (*vartype_ptr)->class->supers = new_Vector(0);
     return 0;
 }
 
@@ -291,9 +317,7 @@ int new_NamedType(char *name, VarType *type, NamedType **namedarg_ptr) {
     return 0;
 }
 
-int new_FuncType(
-        const Vector *args, VarType *ret_type, VarType **vartype_ptr
-) {
+int new_FuncType(const Vector *args, VarType *ret_type, VarType **vartype_ptr) {
     if (vartype_ptr == NULL) {
         return 1;
     }
@@ -467,6 +491,10 @@ static int copy_ClassType(ClassType *type, ClassType **copy_ptr) {
                      copy,
                      &(*copy_ptr)->field_name_to_type,
                      copy_VarType);
+    safe_method_call(type->supers,
+                     copy,
+                     &(*copy_ptr)->supers,
+                     NULL); // Vector of ints, so assignment works without copy
     return 0;
 }
 
@@ -494,10 +522,20 @@ static int copy_ObjectType(ObjectType *type, ObjectType **copy_ptr) {
     }
 }
 
-int classcmp(ClassType *type1, ClassType *type2, UNUSED TypeCheckState *state) {
+int classcmp(ClassType *type1,
+             ClassType *type2,
+             TypeCheckState *state,
+             const Map *seen) {
     if (type1 == type2) {
         return 0;
     }
+    size_t ID1 = type1->classID, ID2 = type2->classID;
+    if (seen->contains(seen, &ID1, sizeof(ID1)) ||
+        seen->contains(seen, &ID2, sizeof(ID2))) {
+        return 1;
+    }
+    safe_method_call(seen, put, &ID1, sizeof(ID1), NULL, NULL);
+    safe_method_call(seen, put, &ID2, sizeof(ID2), NULL, NULL);
     size_t field_count;
     size_t *field_lengths = NULL;
     char **fields = NULL;
@@ -510,7 +548,6 @@ int classcmp(ClassType *type1, ClassType *type2, UNUSED TypeCheckState *state) {
     size_t i;
     for (i = 0; i < field_count; i++) {
         VarType *given_type = NULL;
-        print_Map(type1->field_name_to_type, print_VarType);
         if (type1->field_name_to_type->get(type1->field_name_to_type,
                 fields[i],
                 field_lengths[i],
@@ -524,7 +561,7 @@ int classcmp(ClassType *type1, ClassType *type2, UNUSED TypeCheckState *state) {
                          fields[i],
                          field_lengths[i],
                          &expected_type);
-        if (typecmp(given_type, expected_type, state)) {
+        if (typecmp(given_type, expected_type, state, seen)) {
             valid = 0;
             break;
         }
@@ -560,17 +597,29 @@ int getClassTypeFromObject(ObjectType *obj,
 
 int objectcmp(ObjectType *type1,
               ObjectType *type2,
-              UNUSED  TypeCheckState *state) {
+              UNUSED  TypeCheckState *state,
+              const Map *seen) {
     ClassType *class1 = NULL, *class2 = NULL;
     if (getClassTypeFromObject(type1, state, &class1) ||
         getClassTypeFromObject(type2, state, &class2)) {
         return 1;
     }
-    return classcmp(class1, class2, state);
+    /*
+    printf("object%d:\n", class1->classID);
+    print_Map(class1->field_name_to_type, print_VarType);
+    printf("object%d:\n", class2->classID);
+    print_Map(class2->field_name_to_type, print_VarType);
+    printf("\n");
+     */
+    return classcmp(class1, class2, state, seen);
 }
 
-int typecmp(const VarType *type1, const VarType *type2, TypeCheckState *state) {
+int typecmp(const VarType *type1,
+            const VarType *type2,
+            TypeCheckState *state,
+            const Map *seen) {
     //Returns 1 if the types differ, 0 if they match
+    int delSeen, ret;
     if (type1 == NULL || type2 == NULL) {
         return type1 != type2;
     }
@@ -586,14 +635,28 @@ int typecmp(const VarType *type1, const VarType *type2, TypeCheckState *state) {
     }
     switch (type1->type) {
         case FUNCTION:
-            return funccmp(type1->function, type2->function, state);
+            return funccmp(type1->function, type2->function, state, seen);
         case OBJECT:
-            return objectcmp(type1->object, type2->object, state);
+            delSeen = 0;
+            if (seen == NULL) {
+                delSeen = 1;
+                seen = new_Map(0, 0);
+            }
+            ret = objectcmp(type1->object, type2->object, state, seen);
+            if (delSeen) seen->free(seen, NULL);
+            return ret;
         case CLASS:
-            return classcmp(type1->class, type2->class, state);
+            delSeen = 0;
+            if (seen == NULL) {
+                delSeen = 1;
+                seen = new_Map(0, 0);
+            }
+            ret = classcmp(type1->class, type2->class, state, seen);
+            if (delSeen) seen->free(seen, NULL);
+            return ret;
         case REFERENCE:
         case PAREN:
-            return typecmp(type1->sub_type, type1->sub_type, state);
+            return typecmp(type1->sub_type, type1->sub_type, state, seen);
         case HOLD:
             return 0;
         case TUPLE:;
@@ -606,7 +669,7 @@ int typecmp(const VarType *type1, const VarType *type2, TypeCheckState *state) {
                 VarType *sub1 = NULL, *sub2 = NULL;
                 safe_method_call(type1->tuple, get, i, &sub1);
                 safe_method_call(type2->tuple, get, i, &sub2);
-                if (typecmp(sub1, sub2, state)) {
+                if (typecmp(sub1, sub2, state, seen)) {
                     return 1;
                 }
             }
@@ -622,7 +685,8 @@ int typecmp(const VarType *type1, const VarType *type2, TypeCheckState *state) {
 
 static int funccmp(const FuncType *type1,
                    const FuncType *type2,
-                   TypeCheckState *state) {
+                   TypeCheckState *state,
+                   const Map *seen) {
     int ret = 0;
     size_t size1 = type1->named_args->size(type1->named_args),
            size2 = type2->named_args->size(type2->named_args);
@@ -634,11 +698,11 @@ static int funccmp(const FuncType *type1,
                       *arg2 = NULL;
             safe_method_call(type1->named_args, get, i, &arg1);
             safe_method_call(type2->named_args, get, i, &arg2);
-            if (typecmp(arg1->type, arg2->type, state)) {
+            if (typecmp(arg1->type, arg2->type, state, NULL)) {
                 ret = 1;
                 break;
             }
         }
     }
-    return ret || typecmp(type1->ret_type, type2->ret_type, state);
+    return ret || typecmp(type1->ret_type, type2->ret_type, state, seen);
 }

@@ -17,6 +17,7 @@ struct ast_program_data {
     const Map *class_index;    // Map<char*, size_t>
     const Vector *class_types; // Vector<ClassType>
     const Vector *class_stmts; // Vector<Vector<ASTNode*>>
+    const Vector *class_envs;
 };
 
 struct ast_program_vtable {

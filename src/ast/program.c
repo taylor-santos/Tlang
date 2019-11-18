@@ -108,6 +108,7 @@ const ASTNode *new_ProgramNode(struct YYLTYPE *loc, const Vector *statements) {
     data->class_index  = new_Map(0, 0);
     data->class_types  = new_Vector(0);
     data->class_stmts  = new_Vector(0);
+    data->class_envs   = new_Vector(0);
     data->func_defs    = new_Map(0, 0);
     vtable->free       = free_program;
     vtable->json       = json_program;

@@ -44,14 +44,18 @@ static void json_int(const void *this, int indent, FILE *out) {
 }
 
 static int GetType_Int(UNUSED const ASTNode *node,
-                       UNUSED const Map *symbols,
+                       const Map *symbols,
                        UNUSED TypeCheckState *state,
                        VarType **type_ptr) {
     if (type_ptr == NULL) {
         return 1;
     }
-    ASTIntData *data = node->data;
-    *type_ptr = data->type;
+    char *name = NULL;
+    safe_asprintf(&name, "var_%s", BUILTIN_NAMES[INT]);
+    VarType *class_type = NULL;
+    safe_method_call(symbols, get, name, strlen(name), &class_type);
+    *type_ptr = class_type->class->instance;
+    free(name);
     return 0;
 }
 

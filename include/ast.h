@@ -48,7 +48,7 @@ struct YYLTYPE;
 struct VarType;
 
 const ASTNode *new_ClassNode(struct YYLTYPE *loc,
-                             const Vector *inheritance,
+                             const Vector *supers,
                              const Vector *stmts);
 const ASTNode *new_DefNode(struct YYLTYPE *loc,
                            const Vector *lhs,

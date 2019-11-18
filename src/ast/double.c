@@ -44,25 +44,31 @@ static void json_double(const void *this, int indent, FILE *out) {
 }
 
 static int GetType_Double(UNUSED const ASTNode *node,
-                          UNUSED const Map *symbols,
+                          const Map *symbols,
                           UNUSED TypeCheckState *state,
                           VarType **type_ptr) {
     if (type_ptr == NULL) {
         return 1;
     }
-    ASTDoubleData *data = node->data;
-    *type_ptr = data->type;
+    char *name = NULL;
+    safe_asprintf(&name, "var_%s", BUILTIN_NAMES[DOUBLE]);
+    VarType *class_type = NULL;
+    safe_method_call(symbols, get, name, strlen(name), &class_type);
+    *type_ptr = class_type->class->instance;
+    free(name);
     return 0;
 }
 
-static char *CodeGen_Double(UNUSED const ASTNode *node,
-                            UNUSED CodegenState *state,
-                            UNUSED FILE *out) {
+static char *CodeGen_Double(const ASTNode *node,
+                            CodegenState *state,
+                            FILE *out) {
     ASTDoubleData *data = node->data;
     char *ret;
     safe_asprintf(&ret, "tmp%d", state->tmp_count++);
     print_indent(state->indent, out);
-    fprintf(out, "void *%s = new_class%d(%f);\n", ret, DOUBLE, data->val);
+    fprintf(out, "void *%s = call(var_double);\n", ret);
+    print_indent(state->indent, out);
+    fprintf(out, "((class%d*)%s)->val = %f;\n", INT, ret, data->val);
     return ret;
 }
 
