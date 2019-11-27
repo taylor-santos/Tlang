@@ -69,6 +69,9 @@ void json_VarType(const void *this, int indent, FILE *out) {
                 json_VarType(type->sub_type, indent, out);
                 fprintf(out, "\n");
                 break;
+            case TRAIT:
+                fprintf(out, "\"trait\"\n");
+                break;
             case CLASS:
                 fprintf(out, "\"class\"\n");
                 break;

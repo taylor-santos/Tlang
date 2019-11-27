@@ -56,7 +56,7 @@ static int GetType_TypedVar(const ASTNode *node,
     size_t len = strlen(data->name);
     if (symbols->contains(symbols, data->name, len)) {
         safe_method_call(symbols, get, data->name, len, type_ptr);
-        if (typecmp(*type_ptr, data->given_type, state, NULL)) {
+        if (typecmp(*type_ptr, data->given_type, state, symbols, NULL)) {
             return 1;
         }
         data->type = *type_ptr;
@@ -70,7 +70,7 @@ static int GetType_TypedVar(const ASTNode *node,
     VarType *type_copy = NULL;
     safe_function_call(copy_VarType, data->type, &type_copy);
     char *name = NULL;
-    strdup_safe(data->name, &name);
+    safe_strdup(&name, data->name);
     return 0;
 }
 

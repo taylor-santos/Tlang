@@ -125,6 +125,9 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
             case T_CLASS:
                 printf("CLASS\n");
                 return 1;
+            case T_CLASS:
+                printf("TRAIT\n");
+                return 1;
             case T_ERROR:
                 printf("ERROR\n");
                 return 1;
@@ -275,6 +278,7 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
     return { push_token((Token){.type=T_RETURN}); }
     ref    { push_token((Token){.type=T_REF}); }
     class  { push_token((Token){.type=T_CLASS}); }
+    trait  { push_token((Token){.type=T_TRAIT}); }
     ->     { push_token((Token){.type=T_ARROW}); }
     :=     { push_token((Token){.type=T_DEFINE}); }
     !      { push_token((Token){.type=T_HOLD}); }
@@ -290,7 +294,7 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
     }
     [a-zA-Z_][a-zA-Z0-9_]* {
         char *val = NULL;
-        asprintf(&val, "var_%s", yytext);
+        safe_strdup(&val, yytext);
         push_token((Token){.type=T_IDENT,  .value.str_val=val});
     }
     [\"]([^"]|[\\].)*[\"] {
@@ -301,7 +305,7 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
     [ \t]+ // Ignore non-leading whitespace
     [\~\!\%\^\*\/\+\-\=]+ {
         char *val;
-        asprintf(&val, "var_0x%X", yytext[0]);
+        safe_asprintf(&val, "0x%X", yytext[0]);
         for (int i = 1; yytext[i] != '\0'; i++) {
             append_string(&val, "%X", yytext[i]);
         }
@@ -320,7 +324,7 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
 
     . {
         char *val = NULL;
-        safe_asprintf(&val, "var_0x%X", (int)*yytext);
+        safe_asprintf(&val, "0x%X", (int)*yytext);
         push_token((Token){.type=T_IDENT, .value.str_val=val});
     }
 }

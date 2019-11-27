@@ -51,11 +51,12 @@
     const struct ASTNode *ast;
     const Vector         *vec;
     struct VarType       *type;
+    struct NamedType     *named_type;
 }
 
 %token T_INDENT    "indent"
 %token T_OUTDENT   "outdent"
-%token T_ERROR     "error"
+%token T_ERROR     "syntax error"
 %token T_NEWLINE   "line break"
 %token T_FUNC      "func"
 %token T_RETURN    "return"
@@ -63,6 +64,7 @@
 %token T_HOLD      "!"
 %token T_ARROW     "->"
 %token T_CLASS     "class"
+%token T_TRAIT     "trait"
 %token T_DEFINE    ":="
 %token END 0       "end of file"
 %token<int_val>    T_INT "integer"
@@ -72,12 +74,13 @@
 
 
 %type<ast>  File Return Statement Variable Expression SubExpr Value
-            FuncBlock ClassBlock
+            FuncBlock ClassBlock TraitBlock
 %type<vec>  Statements ReturnStatements OneLineStatementsList OneLineStatements
             OneLineReturnStatements OptRefExpr ExprChain OptTypes Tuple
-            OptArgTypes Variables
-            OptNameArgs NameArgs TypesList TypeTuple
+            OptArgTypes Variables OptNameArgs NameArgs TypesList TypeTuple 
+            TypeStatements OneLineTypeStmtsList OneLineTypeStmts IdentsList
 %type<type> FuncType OptType Type TypeDef
+%type<named_type> NamedType
 
 %start File
 
@@ -232,6 +235,10 @@ Expression:
     {
         $$ = $1;
     }
+  | TraitBlock
+      {
+          $$ = $1;
+      }
 
 OptRefExpr:
     ExprChain
@@ -332,14 +339,72 @@ ClassBlock:
         $$ = new_ClassNode(&@$, $2, $4);
     }
 
+TraitBlock:
+    T_TRAIT OptTypes T_NEWLINE T_INDENT TypeStatements T_OUTDENT
+    {
+        $$ = new_TraitNode(&@$, $2, $5);
+    }
+  | T_TRAIT OptTypes '{' OneLineTypeStmts '}'
+    {
+        $$ = new_ClassNode(&@$, $2, $4);
+    }
+
+TypeStatements:
+    NamedType T_NEWLINE
+    {
+        $$ = new_Vector(0);
+        $$->append($$, $1);
+    }
+  | TypeStatements NamedType T_NEWLINE
+    {
+        $$ = $1;
+        $$->append($$, $2);
+    }
+
+OneLineTypeStmts:
+    NamedType
+    {
+        $$ = new_Vector(0);
+        $$->append($$, $1);
+    }
+  | OneLineTypeStmtsList NamedType
+    {
+        $$ = $1;
+        $$->append($$, $2);
+    }
+
+OneLineTypeStmtsList:
+    NamedType ';'
+    {
+        $$ = new_Vector(0);
+        $$->append($$, $1);
+    }
+  | OneLineTypeStmtsList NamedType ';'
+    {
+        $$ = $1;
+        $$->append($$, $2);
+    }
+
 OptTypes:
     %empty
     {
         $$ = new_Vector(0);
     }
-  | ':' TypesList
+  | ':' IdentsList
     {
         $$ = $2;
+    }
+
+IdentsList:
+    T_IDENT
+    {
+        $$ = new_Vector(0);
+        $$->append($$, $1);
+    }
+  | IdentsList ',' T_IDENT
+    {
+        $$ = $1;
+        $$->append($$, $3);
     }
 
 Tuple:
@@ -420,20 +485,23 @@ OptNameArgs:
     }
 
 NameArgs:
-    T_IDENT ':' Type
+    NamedType
     {
         $$ = new_Vector(0);
-        NamedType *arg = NULL;
-        new_NamedType($1, $3, &arg);
-        $$->append($$, arg);
+        $$->append($$, $1);
     }
-  | NameArgs ',' T_IDENT ':' Type
+  | NameArgs ',' NamedType
     {
         $$ = $1;
-        NamedType *arg = NULL;
-        new_NamedType($3, $5, &arg);
-        $$->append($$, arg);
+        $$->append($$, $3);
     }
+
+NamedType:
+    T_IDENT ':' Type
+    {
+        new_NamedType($1, $3, &$$);
+    }
+
 
 TypesList:
     Type

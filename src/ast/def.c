@@ -107,17 +107,11 @@ static int GetType_Def(const ASTNode *node,
                                    type_copy,
                                    &new_symbol);
                 safe_method_call(state->new_symbols, append, new_symbol);
-                if ((*type_ptr)->type == CLASS) {
-                    size_t classID = (*type_ptr)->class->classID;
-                    ASTProgramData *program_data = state->program_node->data;
-                    safe_method_call(program_data->class_index,
-                                     put,
-                                     lhs_data->name,
-                                     strlen(lhs_data->name),
-                                     (void*)classID,
-                                     NULL);
-                }
-            } else if (typecmp(expected_type, prev_type, state, NULL)) {
+            } else if (typecmp(expected_type,
+                               prev_type,
+                               state,
+                               symbols,
+                               NULL)) {
                 //TODO: Handle incompatible type def
                 fprintf(stderr, "error: incompatible type reassignment\n");
                 return 1;
@@ -135,41 +129,21 @@ static int GetType_Def(const ASTNode *node,
         ASTLExprData *lhs_data = lhs_node->data;
         VarType *prev_type = NULL;
         VarType *expected_type = *type_ptr;
-        /*if (symbols->get(symbols,
+        VarType *type_copy = NULL;
+        safe_function_call(copy_VarType, expected_type, &type_copy);
+        safe_method_call(symbols,
+                         put,
                          lhs_data->name,
                          strlen(lhs_data->name),
-                         &prev_type)) {*/
-            VarType *type_copy = NULL;
-            safe_function_call(copy_VarType, expected_type, &type_copy);
-            safe_method_call(symbols,
-                             put,
-                             lhs_data->name,
-                             strlen(lhs_data->name),
-                             type_copy,
-                             &prev_type); //NULL
-            safe_function_call(copy_VarType, expected_type, &type_copy);
-            NamedType *new_symbol = NULL;
-            safe_function_call(new_NamedType,
-                               strdup(lhs_data->name),
-                               type_copy,
-                               &new_symbol);
-            safe_method_call(state->new_symbols, append, new_symbol);
-            if ((*type_ptr)->type == CLASS) {
-                size_t classID = (*type_ptr)->class->classID;
-                ASTProgramData *program_data = state->program_node->data;
-                size_t prevID;
-                safe_method_call(program_data->class_index,
-                                 put,
-                                 lhs_data->name,
-                                 strlen(lhs_data->name),
-                                 (void*)classID,
-                                 &prevID);
-            }
-        /*} else if (typecmp(expected_type, prev_type, state)) {
-            //TODO: Handle incompatible type def
-            fprintf(stderr, "error: incompatible type reassignment\n");
-            return 1;
-        }*/
+                         type_copy,
+                         &prev_type);
+        safe_function_call(copy_VarType, expected_type, &type_copy);
+        NamedType *new_symbol = NULL;
+        safe_function_call(new_NamedType,
+                           strdup(lhs_data->name),
+                           type_copy,
+                           &new_symbol);
+        safe_method_call(state->new_symbols, append, new_symbol);
     }
 
     data->type = *type_ptr;
@@ -183,6 +157,9 @@ static char *CodeGen_Def(const ASTNode *node, CodegenState *state, FILE *out) {
     ASTStatementVTable *rhs_vtable = rhs->vtable;
     ASTStatementData *rhs_data = rhs->data;
     char *rhs_code = rhs_vtable->codegen(rhs, state, out);
+    if (rhs_code == NULL) {
+        return NULL;
+    }
     if (lhs_size != 1 && rhs_data->type->type == TUPLE) {
         for (size_t i = 0; i < lhs_size; i++) {
             ASTNode *lhs = NULL;

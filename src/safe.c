@@ -32,7 +32,7 @@ int append_string(char **strp, const char *fmt, ...) {
     return vsprintf(*strp + old_size, fmt, args);
 }
 
-int strdup_safe(const void *str, const void *dup_ptr) {
+int safe_strdup(const void *dup_ptr, const void *str) {
     if (dup_ptr == NULL) {
         return 1;
     }

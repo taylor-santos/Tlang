@@ -51,7 +51,7 @@ static int GetType_Double(UNUSED const ASTNode *node,
         return 1;
     }
     char *name = NULL;
-    safe_asprintf(&name, "var_%s", BUILTIN_NAMES[DOUBLE]);
+    safe_asprintf(&name, "%s", BUILTIN_NAMES[DOUBLE]);
     VarType *class_type = NULL;
     safe_method_call(symbols, get, name, strlen(name), &class_type);
     *type_ptr = class_type->class->instance;
@@ -68,7 +68,7 @@ static char *CodeGen_Double(const ASTNode *node,
     print_indent(state->indent, out);
     fprintf(out, "void *%s = call(var_double);\n", ret);
     print_indent(state->indent, out);
-    fprintf(out, "((class%d*)%s)->val = %f;\n", INT, ret, data->val);
+    fprintf(out, "((class%d*)%s)->val = %f;\n", DOUBLE, ret, data->val);
     return ret;
 }
 

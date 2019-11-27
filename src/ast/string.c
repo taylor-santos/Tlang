@@ -51,7 +51,7 @@ static int GetType_String(UNUSED const ASTNode *node,
         return 1;
     }
     char *name = NULL;
-    safe_asprintf(&name, "var_%s", BUILTIN_NAMES[STRING]);
+    safe_asprintf(&name, "%s", BUILTIN_NAMES[STRING]);
     VarType *class_type = NULL;
     safe_method_call(symbols, get, name, strlen(name), &class_type);
     *type_ptr = class_type->class->instance;

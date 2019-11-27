@@ -16,7 +16,7 @@ static void free_class(const void *this) {
     const ASTNode *node = this;
     ASTClassData  *data = node->data;
     free_VarType(data->type);
-    data->supers->free(data->supers, free_NamedType);
+    data->supers->free(data->supers, free);
     data->stmts->free(data->stmts, free_ASTNode);
     data->symbols->free(data->symbols, free_VarType);
     data->fields->free(data->fields, NULL);
@@ -84,7 +84,7 @@ static int GetType_Class(const ASTNode *node,
     VarType *self_type = NULL;
     safe_function_call(copy_VarType, data->type->class->instance, &self_type);
     VarType *prev_self = NULL;
-    char *self_name = "var_self";
+    char *self_name = "self";
     safe_method_call(data->symbols,
                      put,
                      self_name,
@@ -99,27 +99,22 @@ static int GetType_Class(const ASTNode *node,
     size_t super_count = data->supers->size(data->supers);
     data->type->class->supers = new_Vector(0); // Vector of class IDs
     for (size_t i = 0; i < super_count; i++) {
-        NamedType *super = NULL;
-        safe_method_call(data->supers, get, i, &super);
-        if (super->type->type != OBJECT) {
+        char *super_name = NULL;
+        safe_method_call(data->supers, get, i, &super_name);
+        VarType *super = NULL;
+        if(symbols->get(symbols, super_name, strlen(super_name), &super)) {
+            //TODO: Handle unrecognized super name
+            fprintf(stderr, "error: class inherits from unrecognized type\n");
+            return 1;
+        }
+        if (super->type != CLASS) {
             //TODO: Handle inherits from non-class type
             fprintf(stderr, "error: class inherits from non-class type\n");
             return 1;
         }
-        char *super_name = super->type->object->name;
-        size_t superID = 0;
-        if (program_data->class_index->get(program_data->class_index,
-                                           super_name,
-                                           strlen(super_name),
-                                           &superID)) {
-            //TODO: Handle inherits from unrecognized class
-            fprintf(stderr,"error: class inherits from unrecognized type \""
-                           "%s\"\n", super_name);
-            return 1;
-        }
+        size_t superID = super->class->classID;
         safe_method_call(data->type->class->supers, append, (void*)superID);
-        ClassType *super_class = NULL;
-        safe_method_call(program_data->class_types, get, superID, &super_class);
+        ClassType *super_class = super->class;
         size_t field_count = 0;
         size_t *field_lengths = NULL;
         char **field_names = NULL;
@@ -157,7 +152,7 @@ static int GetType_Class(const ASTNode *node,
                              type_copy,
                              &prev_type);
             if (prev_type != NULL &&
-                typecmp(type_copy, prev_type, state,NULL)) {
+                typecmp(type_copy, prev_type, state, symbols, NULL)) {
                 //TODO: Handle incompatible fields
                 fprintf(stderr, "error: field \"%.*s\" inherited from class "
                                 "\"%s\" shadows existing field\n",
@@ -216,8 +211,6 @@ static char *CodeGen_Class(const ASTNode *node,
     char *ret;
     safe_asprintf(&ret, "tmp%d", state->tmp_count++);
     print_indent(state->indent, out);
-    fprintf(out, "void *%s;\n", ret);
-    print_indent(state->indent, out);
     fprintf(out, "build_closure(%s, new_class%d", ret, class->classID);
     const char **symbols = NULL;
     size_t *lengths, symbol_count;
@@ -225,8 +218,9 @@ static char *CodeGen_Class(const ASTNode *node,
     for (size_t j = 0; j < symbol_count; j++) {
         VarType *var_type = NULL;
         safe_method_call(data->symbols, get, symbols[j], lengths[j], &var_type);
-        fprintf(out, ", %.*s", (int) lengths[j],
-                symbols[j]);
+        if (var_type->type != TRAIT) {
+            fprintf(out, ", var_%.*s", (int) lengths[j], symbols[j]);
+        }
         free((void *) symbols[j]);
     }
     free(lengths);
@@ -263,7 +257,7 @@ const ASTNode *new_ClassNode(struct YYLTYPE *loc,
         return NULL;
     }
     memcpy(data->loc, loc, sizeof(*loc));
-    data->supers = supers;
+    data->supers      = supers;
     data->stmts       = stmts;
     data->fields      = new_Map(0, 0);
     data->env         = new_Map(0, 0);

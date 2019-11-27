@@ -65,7 +65,9 @@ static char *CodeGen_Variable(const ASTNode *node,
                               UNUSED CodegenState *state,
                               UNUSED FILE *out) {
     ASTVariableData *data = node->data;
-    return strdup(data->name);
+    char *ret = NULL;
+    safe_asprintf(&ret, "var_%s", data->name);
+    return ret;
 }
 
 const ASTNode *new_VariableNode(struct YYLTYPE *loc, char *name) {

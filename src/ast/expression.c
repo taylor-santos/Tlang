@@ -97,20 +97,18 @@ static int parse_object(const Vector *exprs,
     }
     //Node might be a field
     ASTProgramData *program_data = state->program_node->data;
-    size_t classID;
-    safe_function_call(getClassID,
+    VarType *object_type = NULL;
+    safe_function_call(getObjectClass,
                        (*vartype_ptr)->object,
-                       &classID,
-                       program_data->class_index);
-    ClassType *class = NULL;
-    safe_method_call(program_data->class_types, get, classID, &class);
-    const Map *field_names = class->field_name_to_type;
-    if (field_names->get(field_names,
-                         name,
-                         strlen(name),
-                         vartype_ptr)) {
-        fprintf(stderr, "error: object does not have a field named \"%s\"\n",
-                name + strlen("var_"));
+                       symbols,
+                       program_data->class_types,
+                       &object_type);
+    const Map *field_names = object_type->class->field_name_to_type;
+    print_Map(field_names, print_VarType);
+    if (field_names->get(field_names, name, strlen(name), vartype_ptr)) {
+        fprintf(stderr,
+                "error: object does not have a field named \"%s\"\n",
+                name);
         return 1;
     }
     safe_function_call(copy_VarType, *vartype_ptr, &data->type);
@@ -118,7 +116,7 @@ static int parse_object(const Vector *exprs,
     expr->expr_type = EXPR_FIELD;
     expr->sub_expr = *expr_ptr;
     expr->name = name;
-    expr->type = data->type;
+    expr->type = object_type;
     safe_method_call(exprs, get, *index-1, &expr->node);
 
     *expr_ptr = expr;
@@ -255,7 +253,11 @@ static int parse_function(const Vector *exprs,
             }
             NamedType *expected_type = NULL;
             safe_method_call(function->named_args, get, 0, &expected_type);
-            if (typecmp(given_type, expected_type->type, state, NULL)) {
+            if (typecmp(given_type,
+                        expected_type->type,
+                        state,
+                        symbols,
+                        NULL)) {
                 //TODO: Handle incompatible argument type
                 fprintf(stderr, "error: incompatible argument type\n");
                 return 1;
@@ -282,7 +284,11 @@ static int parse_function(const Vector *exprs,
                 safe_method_call(given_type->tuple, get, i, &arg_type);
                 NamedType *expected_type = NULL;
                 safe_method_call(function->named_args, get, i, &expected_type);
-                if (typecmp(arg_type, expected_type->type, state, NULL)) {
+                if (typecmp(arg_type,
+                            expected_type->type,
+                            state,
+                            symbols,
+                            NULL)) {
                     //TODO: Handle incompatible argument type
                     fprintf(stderr, "error: incompatible argument type\n");
                     return 1;
@@ -391,6 +397,10 @@ static int parse_expression(const Vector *exprs,
                 return 1;
             }
             break;
+        case TRAIT:
+            //TODO: Handle trait used in expression
+            fprintf(stderr, "error: trait cannot be used in an expression\n");
+            return 1;
     }
     size_t size = exprs->size(exprs);
     if (*index < size) {
@@ -464,15 +474,11 @@ char *gen_expression(Expression *expr, CodegenState *state, FILE *out) {
             asprintf(&tmp, "tmp%d", state->tmp_count++);
             sub_expr = gen_expression(expr->sub_expr, state, out);
             print_indent(state->indent, out);
-            size_t classID;
-            safe_function_call(getClassID,
-                               expr->sub_expr->type->object,
-                               &classID,
-                               state->class_index);
+            VarType *expr_type = expr->type;
             fprintf(out,
-                    "void *%s = ((class%ld*)%s)->%s;\n",
+                    "void *%s = ((class%d*)%s)->field_%s;\n",
                     tmp,
-                    classID,
+                    expr_type->class->classID,
                     sub_expr,
                     expr->name);
             return tmp;

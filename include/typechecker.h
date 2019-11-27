@@ -10,10 +10,11 @@ typedef struct VarType    VarType;
 typedef struct NamedType  NamedType;
 typedef struct FuncType   FuncType;
 typedef struct ClassType  ClassType;
+typedef struct TraitType  TraitType;
 typedef struct ObjectType ObjectType;
 
 struct VarType {
-    enum { FUNCTION, REFERENCE, HOLD, CLASS, OBJECT, TUPLE, PAREN } type;
+    enum { FUNCTION, REFERENCE, HOLD, CLASS, TRAIT, OBJECT, TUPLE, PAREN } type;
     union {
         FuncType *function;
         ClassType *class;
@@ -21,7 +22,7 @@ struct VarType {
         const Vector *tuple;
         VarType *sub_type;
     };
-    int is_ref;
+    unsigned int is_ref : 1;
 };
 
 struct NamedType {
@@ -35,6 +36,7 @@ struct FuncType {
 };
 
 struct ClassType {
+    unsigned int is_trait : 1;
     const Map *field_name_to_type; // Map<char*, VarType*>
     int classID;
     VarType *instance;
@@ -56,14 +58,17 @@ typedef struct {
     VarType *curr_ret_type;
 } TypeCheckState;
 
-int add_builtins(const ASTNode *node);
 int typecmp(const VarType *type1,
             const VarType *type2,
             TypeCheckState *state,
+            const Map *symbols,
             const Map *seen);
 int copy_VarType(const void *type, const void *copy_ptr);
 void print_VarType(const void*);
-int getClassID(ObjectType *object, size_t *id_ptr, const Map *class_index);
+int getObjectClass(ObjectType *object,
+                   const Map *symbols,
+                   const Vector *classTypes,
+                   VarType **type_ptr);
 
 void free_VarType(void*);
 void free_FuncType(void*);
@@ -75,6 +80,7 @@ int new_RefType   (VarType **vartype_ptr, VarType *sub_type);
 int new_TupleType (VarType **vartype_ptr, const Vector *types);
 int new_HoldType  (VarType **vartype_ptr);
 int new_ClassType (VarType **vartype_ptr);
+int new_TraitType (VarType **vartype_ptr);
 int new_ObjectType(VarType **vartype_ptr);
 int new_ParenType (VarType **vartype_ptr);
 int new_NamedType (char *name, VarType *type, NamedType **namedarg_ptr);

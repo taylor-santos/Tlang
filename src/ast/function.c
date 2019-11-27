@@ -68,7 +68,7 @@ static int GetType_Function(const ASTNode *node,
     VarType *self_type = NULL;
     safe_function_call(copy_VarType, data->type, &self_type);
     VarType *prev_self = NULL;
-    char *self_name = "var_self";
+    char *self_name = "self";
     safe_method_call(data->symbols,
                      put,
                      self_name,
@@ -134,6 +134,7 @@ static int GetType_Function(const ASTNode *node,
             if (typecmp(data->type->function->ret_type,
                         state->curr_ret_type,
                         state,
+                        symbols,
                         NULL)) {
                 //TODO: Handle incompatible return type
                 fprintf(stderr, "error: returned value has incompatible type "
@@ -167,8 +168,6 @@ static char *CodeGen_Function(const ASTNode *node,
     char *ret = NULL;
     safe_asprintf(&ret, "tmp%d", state->tmp_count++);
     print_indent(state->indent, out);
-    fprintf(out, "void *%s;\n", ret);
-    print_indent(state->indent, out);
     fprintf(out, "build_closure(%s, func%d", ret, *index);
     const char **symbols = NULL;
     size_t *lengths, symbol_count;
@@ -176,7 +175,9 @@ static char *CodeGen_Function(const ASTNode *node,
     for (size_t j = 0; j < symbol_count; j++) {
         VarType *var_type = NULL;
         safe_method_call(data->symbols, get, symbols[j], lengths[j], &var_type);
-        fprintf(out, ", %.*s", (int) lengths[j], symbols[j]);
+        if (var_type->type != TRAIT) {
+            fprintf(out, ", var_%.*s", (int) lengths[j], symbols[j]);
+        }
         free((void *) symbols[j]);
     }
     free(lengths);

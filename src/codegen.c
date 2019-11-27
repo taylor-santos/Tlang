@@ -1,4 +1,3 @@
-#include <string.h>
 #include <stdio.h>
 #include "safe.h"
 #include "builtins.h"
@@ -6,7 +5,6 @@
 #include "vector.h"
 #include "codegen.h"
 #include "typechecker.h"
-#include "ast/class.h"
 #include "ast/statement.h"
 #include "ast/function.h"
 #include "ast/program.h"
@@ -34,40 +32,28 @@ static void define_closures(FILE *out) {
     fprintf(out, "size_t env_size;\n");
     fprintf(out, "} closure;\n");
     fprintf(out, "\n");
-    fprintf(out, "void print_closure(closure *c) {\n");
-    print_indent(1, out);
-    fprintf(out, "printf(\"{ \");\n");
-    print_indent(1, out);
-    fprintf(out, "char *sep = \"\";\n");
-    print_indent(1, out);
-    fprintf(out, "for (size_t i = 0; i < c->env_size; i++) {\n");
-    print_indent(2, out);
-    fprintf(out, "printf(\"%%s%%p\", sep, c->env[i]);\n");
-    print_indent(2, out);
-    fprintf(out, "sep = \", \";\n");
-    print_indent(1, out);
-    fprintf(out, "}\n");
-    print_indent(1, out);
-    fprintf(out, "printf(\" }\\n\");\n");
-    fprintf(out, "}\n");
-    fprintf(out, "\n");
     fprintf(out, "#define call(c, ...) ((void*(*)(closure*, ...))"
                  "((closure*)c)->fn)(c, ##__VA_ARGS__)\n");
-    fprintf(out, "#define build_closure(c, func, ...) { \\\n");
+    fprintf(out, "#define build_closure(c, func, ...) \\\n");
     print_indent(1, out);
+    fprintf(out, "void *c = NULL; \\\n");
+    print_indent(1, out);
+    fprintf(out, "{ \\\n");
+    print_indent(2, out);
     fprintf(out, "c = malloc(sizeof(closure)); \\\n");
-    print_indent(1, out);
+    print_indent(2, out);
     fprintf(out, "((closure*)c)->fn = func; \\\n");
-    print_indent(1, out);
+    print_indent(2, out);
     fprintf(out, "void *env[] = {__VA_ARGS__}; \\\n");
-    print_indent(1, out);
+    print_indent(2, out);
     fprintf(out, "((closure*)c)->env = malloc(sizeof(env)); \\\n");
-    print_indent(1, out);
+    print_indent(2, out);
     fprintf(out, "memcpy(((closure*)c)->env, env, sizeof(env)); "
                  "\\\n");
-    print_indent(1, out);
+    print_indent(2, out);
     fprintf(out, "((closure*)c)->env_size = sizeof(env) / "
                  "sizeof(void*); \\\n");
+    print_indent(1, out);
     fprintf(out, "}\n");
     fprintf(out, "#define build_tuple(t, ...) { \\\n");
     print_indent(1, out);
@@ -83,9 +69,60 @@ static void define_closures(FILE *out) {
 static void define_builtins(FILE *out) {
     fprintf(out, "void builtin_println(closure *c, void *val) {\n");
     print_indent(1, out);
-    fprintf(out, "printf(\"%%d\\n\", ((class0*)val)->val);\n");
+    //TODO: Don't hard-code stringable trait index
+    int STRINGABLE = 3;
+    fprintf(out, "class%d *stringable = val;\n", STRINGABLE);
+    print_indent(1, out);
+    fprintf(out, "class%d *str = call(stringable->field_toString);\n", STRING);
+    print_indent(1, out);
+    fprintf(out, "printf(\"%%s\\n\", str->val);\n");
     fprintf(out, "}\n");
     fprintf(out, "\n");
+    for (size_t i = 0; i < BUILTIN_COUNT; i++) {
+        fprintf(out, "void *class%ld_toString(closure *c, class%ld "
+                     "*self) {\n", i, i);
+        switch((BUILTINS)i) {
+            case STRING:
+                print_indent(1, out);
+                fprintf(out, "return self;\n");
+                break;
+            case INT:
+                print_indent(1, out);
+                fprintf(out,
+                        "class%d *str = new_class%d(NULL);\n",
+                        STRING,
+                        STRING);
+                print_indent(1, out);
+                fprintf(out, "int size = snprintf(NULL, 0, \"%%d\", "
+                             "self->val);\n");
+                print_indent(1, out);
+                fprintf(out, "str->val = malloc(size + 1);\n");
+                print_indent(1, out);
+                fprintf(out, "sprintf(str->val, \"%%d\", self->val);"
+                             "\n");
+                print_indent(1, out);
+                fprintf(out, "return str;\n");
+                break;
+            case DOUBLE:
+                print_indent(1, out);
+                fprintf(out,
+                        "class%d *str = new_class%d(NULL);\n",
+                        STRING,
+                        STRING);
+                print_indent(1, out);
+                fprintf(out, "int size = snprintf(NULL, 0, \"%%f\", "
+                             "self->val);\n");
+                print_indent(1, out);
+                fprintf(out, "str->val = malloc(size + 1);\n");
+                print_indent(1, out);
+                fprintf(out, "sprintf(str->val, \"%%f\", self->val);"
+                             "\n");
+                print_indent(1, out);
+                fprintf(out, "return str;\n");
+                break;
+        }
+        fprintf(out, "}\n");
+    }
 }
 
 static int define_classes(CodegenState *state, FILE *out) {
@@ -126,95 +163,112 @@ static int define_classes(CodegenState *state, FILE *out) {
             if (field->is_ref) {
                 fprintf(out, "*");
             }
-            fprintf(out, "%.*s;\n", (int)field_lengths[j], fields[j]);
+            fprintf(out, "field_%.*s;\n", (int)field_lengths[j], fields[j]);
         }
         state->indent--;
         fprintf(out, "};\n");
-        fprintf(out, "void *new_class%d(closure *c) {\n", class->classID);
-        state->indent++;
-        print_indent(state->indent, out);
-        fprintf(out,
-                "class%d *var_self = malloc(sizeof(class%d));\n",
-                class->classID,
-                class->classID);
-        print_indent(state->indent, out);
-        fprintf(out, "init%d(c, var_self);\n", class->classID);
-        print_indent(state->indent, out);
-        fprintf(out, "return var_self;\n");
-        state->indent--;
-        print_indent(state->indent, out);
-        fprintf(out, "}\n");
-        fprintf(out, "void init%ld(closure *c, class%ld *var_self) {\n", i, i);
-        state->indent++;
-        for (size_t j = 0; j < field_count; j++) {
+        if (!class->is_trait) { // Traits don't have constructors
+            fprintf(out, "void *new_class%d(closure *c) {\n", class->classID);
+            state->indent++;
             print_indent(state->indent, out);
             fprintf(out,
-                    "#define %.*s var_self->%.*s\n",
-                    (int)field_lengths[j],
-                    fields[j],
-                    (int)field_lengths[j],
-                    fields[j]);
-        }
-        const Map *envs = NULL;
-        safe_method_call(state->class_envs, get, i, &envs);
-        const char **env = NULL;
-        size_t env_count;
-        size_t *env_lengths;
-        safe_method_call(envs, keys, &env_count, &env_lengths, &env);
-        for (size_t j = 0; j < env_count; j++) {
-            print_indent(1, out);
-            fprintf(out, "#define %.*s c->env[%ld]\n",
-                    (int) env_lengths[j],
-                    env[j],
-                    j);
-        }
-        if (i < BUILTIN_COUNT) {
+                    "class%d *var_self = malloc(sizeof(class%d));\n",
+                    class->classID,
+                    class->classID);
             print_indent(state->indent, out);
-            fprintf(out, "var_val = var_self;\n");
-        }
-        size_t super_count = class->supers->size(class->supers);
-        for (size_t j = 0; j < super_count; j++) {
-            size_t superID = 0;
-            safe_method_call(class->supers, get, j, &superID);
+            fprintf(out, "init%d(c, var_self);\n", class->classID);
             print_indent(state->indent, out);
-            fprintf(out, "init%ld(c, (class%ld*)var_self);\n", j, j);
-            /*
-            const Vector *super_stmts = NULL;
-            safe_method_call(state->class_stmts, get, superID, &super_stmts);
-            size_t stmt_count = super_stmts->size(super_stmts);
-            for (size_t k = 0; k < stmt_count; k++) {
+            fprintf(out, "return var_self;\n");
+            state->indent--;
+            print_indent(state->indent, out);
+            fprintf(out, "}\n");
+            if (i < BUILTIN_COUNT) {
+                fprintf(out, "void *class%ld_toString(closure *c, class%ld "
+                             "*self);\n", i, i);
+            }
+            fprintf(out,
+                    "void init%ld(closure *c, class%ld *var_self) {\n",
+                    i,
+                    i);
+            state->indent++;
+            for (size_t j = 0; j < field_count; j++) {
+                print_indent(state->indent, out);
+                fprintf(out,
+                        "#define var_%.*s var_self->field_%.*s\n",
+                        (int) field_lengths[j],
+                        fields[j],
+                        (int) field_lengths[j],
+                        fields[j]);
+            }
+            const Map *envs = NULL;
+            safe_method_call(state->class_envs, get, i, &envs);
+            const char **env = NULL;
+            size_t env_count;
+            size_t *env_lengths;
+            safe_method_call(envs, keys, &env_count, &env_lengths, &env);
+            size_t env_index = 0;
+            for (size_t j = 0; j < env_count; j++) {
+                VarType *type = NULL;
+                safe_method_call(envs, get, env[j], env_lengths[j], &type);
+                if (type->type != TRAIT) {
+                    print_indent(1, out);
+                    fprintf(out,
+                            "#define var_%.*s c->env[%ld]\n",
+                            (int) env_lengths[j],
+                            env[j],
+                            env_index++);
+                }
+            }
+            if (i < BUILTIN_COUNT) {
+                print_indent(state->indent, out);
+                fprintf(out, "var_val = var_self;\n");
+            }
+            size_t super_count = class->supers->size(class->supers);
+            for (size_t j = 0; j < super_count; j++) {
+                size_t superID = 0;
+                safe_method_call(class->supers, get, j, &superID);
+                print_indent(state->indent, out);
+                fprintf(out,
+                        "init%ld(c, (class%ld*)var_self);\n",
+                        superID,
+                        superID);
+            }
+            const Vector *stmts = NULL;
+            safe_method_call(state->class_stmts, get, i, &stmts);
+            size_t stmt_count = stmts->size(stmts);
+            for (size_t j = 0; j < stmt_count; j++) {
                 ASTNode *stmt = NULL;
-                safe_method_call(super_stmts, get, k, &stmt);
+                safe_method_call(stmts, get, j, &stmt);
                 ASTStatementVTable *stmt_vtable = stmt->vtable;
                 char *stmt_code = stmt_vtable->codegen(stmt, state, out);
                 free(stmt_code);
             }
-             */
+            if (i < BUILTIN_COUNT) {
+                print_indent(state->indent, out);
+                fprintf(out,
+                        "build_closure(tmp%d, class%ld_toString);\n",
+                        state->tmp_count,
+                        i);
+                print_indent(state->indent, out);
+                fprintf(out, "var_toString = tmp%d;\n", state->tmp_count++);
+                print_indent(state->indent, out);
+                fprintf(out, "var_self->val = 0;\n");
+            }
+            for (size_t j = 0; j < env_count; j++) {
+                print_indent(1, out);
+                fprintf(out, "#undef var_%.*s\n", (int) env_lengths[j], env[j]);
+            }
+            for (size_t j = 0; j < field_count; j++) {
+                print_indent(state->indent, out);
+                fprintf(out,
+                        "#undef var_%.*s\n",
+                        (int) field_lengths[j],
+                        fields[j]);
+            }
+            state->indent--;
+            fprintf(out, "}\n");
+            fprintf(out, "\n");
         }
-        const Vector *stmts = NULL;
-        safe_method_call(state->class_stmts, get, i, &stmts);
-        size_t stmt_count = stmts->size(stmts);
-        for (size_t j = 0; j < stmt_count; j++) {
-            ASTNode *stmt = NULL;
-            safe_method_call(stmts, get, j, &stmt);
-            ASTStatementVTable *stmt_vtable = stmt->vtable;
-            char *stmt_code = stmt_vtable->codegen(stmt, state, out);
-            free(stmt_code);
-        }
-
-        for (size_t j = 0; j < env_count; j++) {
-            print_indent(1, out);
-            fprintf(out, "#undef %.*s\n", (int) env_lengths[j], env[j]);
-        }
-        for (size_t j = 0; j < field_count; j++) {
-            print_indent(state->indent, out);
-            fprintf(out, "#undef %.*s\n",
-                    (int)field_lengths[j],
-                    fields[j]);
-        }
-        state->indent--;
-        fprintf(out, "}\n");
-        fprintf(out, "\n");
     }
     return 0;
 }
@@ -281,7 +335,7 @@ static int define_functions(CodegenState *state, FILE *out) {
                                  0,
                                  &arg);
                 print_indent(state->indent, out);
-                fprintf(out, "void *%s = arg;\n", arg->name);
+                fprintf(out, "void *var_%s = arg;\n", arg->name);
             } else {
                 for (size_t j = 0; j < arg_count; j++) {
                     NamedType *arg = NULL;
@@ -291,7 +345,7 @@ static int define_functions(CodegenState *state, FILE *out) {
                                      &arg);
                     print_indent(state->indent, out);
                     fprintf(out,
-                            "void *%s = ((void**)arg)[%ld];\n",
+                            "void *void_%s = ((void**)arg)[%ld];\n",
                             arg->name,
                             j);
                 }
@@ -343,12 +397,17 @@ static int define_functions(CodegenState *state, FILE *out) {
             size_t env_count;
             size_t *env_lengths;
             safe_method_call(data->env, keys, &env_count, &env_lengths, &env);
+            size_t env_index = 0;
             for (size_t j = 0; j < env_count; j++) {
-                print_indent(1, out);
-                fprintf(out, "#define %.*s c->env[%ld]\n",
-                        (int) env_lengths[j],
-                        env[j],
-                        j);
+                VarType *type = NULL;
+                safe_method_call(data->env, get, env[j], env_lengths[j], &type);
+                if (type->type != TRAIT) {
+                    print_indent(1, out);
+                    fprintf(out, "#define var_%.*s c->env[%ld]\n",
+                            (int) env_lengths[j],
+                            env[j],
+                            env_index++);
+                }
             }
 
             ASTNode **stmts = NULL;
@@ -364,7 +423,7 @@ static int define_functions(CodegenState *state, FILE *out) {
 
             for (size_t j = 0; j < env_count; j++) {
                 print_indent(1, out);
-                fprintf(out, "#undef %.*s\n",
+                fprintf(out, "#undef var_%.*s\n",
                         (int) env_lengths[j],
                         env[j]);
             }
@@ -394,8 +453,10 @@ int define_main(ASTProgramData *data, CodegenState *state, FILE *out) {
     for (size_t i = 0; i < symbol_count; i++) {
         VarType *type = NULL;
         safe_method_call(data->symbols, get, symbols[i], lengths[i], &type);
-        fprintf(out, "%s%.*s", sep, (int) lengths[i], symbols[i]);
-        sep = ", *";
+        if (type->type != TRAIT) {
+            fprintf(out, "%svar_%.*s", sep, (int) lengths[i], symbols[i]);
+            sep = ", *";
+        }
         free((char *) symbols[i]);
     }
     if (symbol_count > 0) {
@@ -409,16 +470,23 @@ int define_main(ASTProgramData *data, CodegenState *state, FILE *out) {
     for (size_t i = 0; i < sizeof(builtins) / sizeof(*builtins); i++) {
         print_indent(state->indent, out);
         fprintf(out,
-                "build_closure(var_%s, builtin_%s)\n",
-                builtins[i],
+                "build_closure(tmp%d, builtin_%s)\n",
+                state->tmp_count,
                 builtins[i]);
+        print_indent(state->indent, out);
+        fprintf(out, "var_%s = tmp%d;\n", builtins[i], state->tmp_count++);
     }
     for (size_t i = 0; i < BUILTIN_COUNT; i++) {
         print_indent(state->indent, out);
         fprintf(out,
-                "build_closure(var_%s, new_class%ld)\n",
-                BUILTIN_NAMES[i],
+                "build_closure(tmp%d, new_class%ld)\n",
+                state->tmp_count,
                 i);
+        print_indent(state->indent, out);
+        fprintf(out,
+                "var_%s = tmp%d;\n",
+                BUILTIN_NAMES[i],
+                state->tmp_count++);
     }
 
     ASTNode **stmts = NULL;
@@ -428,14 +496,27 @@ int define_main(ASTProgramData *data, CodegenState *state, FILE *out) {
         ASTNode *stmt = stmts[i];
         ASTStatementVTable *vtable = stmt->vtable;
         char *code = vtable->codegen(stmt, state, out);
-        print_indent(1, out);
-        fprintf(out, "%s;\n", code);
         free(code);
     }
     free(stmts);
     state->indent--;
     fprintf(out, "}\n");
     fprintf(out, "\n");
+    return 0;
+}
+
+
+int orderFields(CodegenState *state) {
+    size_t num_classes = state->class_types->size(state->class_types);
+    struct pair {
+        char *name;
+        VarType *type;
+    };
+    for (size_t i = 0; i < num_classes; i++) {
+        ClassType *class = NULL;
+        safe_method_call(state->class_types, get, i, &class);
+
+    }
     return 0;
 }
 
@@ -453,8 +534,6 @@ int GenerateCode(const ASTNode *program, FILE *out) {
     codegen_state->class_types = data->class_types;
     codegen_state->class_stmts = data->class_stmts;
     codegen_state->class_envs  = data->class_envs;
-    codegen_state->class_index = data->class_index;
-
 
     include_headers(out);
     define_closures(out);
