@@ -20,6 +20,8 @@ struct data {
     size_t cap_diff;
     double load_factor;
     Entry  **entries;
+    unsigned long(*hash)(const void*, size_t);
+    int (*keycmp)(const void*, size_t, const void*, size_t);
 };
 
 void print_Map(const Map *this, void (*printer)(const void *)) {
@@ -60,28 +62,30 @@ Entry *new_Entry(
     return new;
 }
 
-unsigned long hash(const char *key, size_t len) {
-    /* djb2 hash function
-     * http://www.cse.yorku.ca/~oz/hash.html
-     */
-    unsigned long hash = 5381;
-    size_t        i;
-    for (i = 0; i < len; i++) {
-        hash = ((hash << 5u) + hash) + *key++;
-    }
-    return hash;
-}
-
-int keycmp(const char *key1, size_t len1, const char *key2, size_t len2) {
-    for (; len1 && len2; key1++, len1--, key2++, len2--) {
-        if (*key1 != *key2) {
-            return *key1 - *key2;
+int keycmp(const void *key1, size_t len1, const void *key2, size_t len2) {
+    const char *k1 = key1, *k2 = key2;
+    for (; len1 && len2; k1++, len1--, k2++, len2--) {
+        if (*k1 != *k2) {
+            return *k1 - *k2;
         }
     }
     if (len1 != len2) {
         return (int) len1 - (int) len2;
     }
     return 0;
+}
+
+unsigned long hash(const void *key, size_t len) {
+    /* djb2 hash function
+     * http://www.cse.yorku.ca/~oz/hash.html
+     */
+    unsigned long hash = 5381;
+    size_t i;
+    const char *k = key;
+    for (i = 0; i < len; i++) {
+        hash = ((hash << 5u) + hash) + *k++;
+    }
+    return hash;
 }
 
 int resize(const Map *this) {
@@ -120,12 +124,12 @@ int map_put(
         const void *prev_ptr
 ) {
     Data          *data = this->data;
-    unsigned long h     = hash(key, len);
+    unsigned long h     = data->hash(key, len);
     Entry         **curr;
     for (curr = &data->entries[h % data->capacity];
          *curr != NULL;
          curr          = &(*curr)->next) {
-        int cmp = keycmp(key, len, (*curr)->key, (*curr)->len);
+        int cmp = data->keycmp(key, len, (*curr)->key, (*curr)->len);
         if (cmp == 0) {
             if (prev_ptr == NULL) {
                 return 1;
@@ -167,12 +171,12 @@ int map_get(
         const Map *this, const void *key, size_t len, const void *value_ptr
 ) {
     Data          *data = this->data;
-    unsigned long h     = hash(key, len);
+    unsigned long h     = data->hash(key, len);
     Entry         *curr;
     for (curr = data->entries[h % data->capacity];
          curr != NULL;
          curr = curr->next) {
-        int cmp = keycmp(key, len, curr->key, curr->len);
+        int cmp = data->keycmp(key, len, curr->key, curr->len);
         if (cmp == 0) {
             if (value_ptr == NULL) {
                 return 1;
@@ -188,12 +192,12 @@ int map_get(
 
 int map_contains(const Map *this, const void *key, size_t len) {
     Data          *data = this->data;
-    unsigned long h     = hash(key, len);
+    unsigned long h     = data->hash(key, len);
     Entry         *curr;
     for (curr = data->entries[h % data->capacity];
          curr != NULL;
          curr = curr->next) {
-        int cmp = keycmp(key, len, curr->key, curr->len);
+        int cmp = data->keycmp(key, len, curr->key, curr->len);
         if (cmp == 0) {
             return 1;
         } else if (cmp < 0) {
@@ -270,6 +274,36 @@ size_t map_size(const Map *this) {
     return data->size;
 }
 
+int map_set_hash(const Map *this,
+                 unsigned long(*hashfn)(const void*, size_t),
+                 int (*keycmpfn)(const void*, size_t, const void*, size_t)) {
+    Data *data = this->data;
+    Entry  **new_entries = calloc(data->capacity, sizeof(*new_entries));
+    if (new_entries == NULL) {
+        return 1;
+    }
+    for (size_t i = 0; i < data->capacity; i++) {
+        for (Entry *old = data->entries[i]; old != NULL;) {
+            unsigned long h = hashfn(old->key, old->len) % data->capacity;
+            Entry **n;
+            for (n = &new_entries[h]; *n != NULL; n = &(*n)->next) {
+                if (keycmpfn((old)->key, old->len, (*n)->key, (*n)->len) <= 0) {
+                    break;
+                }
+            }
+            Entry *tmp = old->next;
+            old->next = *n;
+            *n = old;
+            old = tmp;
+        }
+    }
+    free(data->entries);
+    data->entries = new_entries;
+    data->hash = hashfn;
+    data->keycmp = keycmpfn;
+    return 0;
+}
+
 void map_free(const Map *this, void (*val_free)(void *)) {
     Data        *data = this->data;
     for (size_t i     = 0; i < data->capacity; i++) {
@@ -307,6 +341,8 @@ const Map *new_Map(size_t capacity, double load_factor) {
         free(data);
         return NULL;
     }
+    data->hash = hash;
+    data->keycmp = keycmp;
     Map *m = malloc(sizeof(*m));
     if (m == NULL) {
         free(data->entries);
@@ -320,6 +356,7 @@ const Map *new_Map(size_t capacity, double load_factor) {
     m->copy     = map_copy;
     m->keys     = map_keys;
     m->size     = map_size;
+    m->set_hash = map_set_hash;
     m->free     = map_free;
     return m;
 }

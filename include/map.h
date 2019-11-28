@@ -17,8 +17,8 @@ struct map {
     int    (*keys)    (const Map*, size_t*, size_t**, const void*);
     size_t (*size)    (const Map*);
     void   (*free)    (const Map*, void (*)(void*));
+    int    (*set_hash)(const Map*, unsigned long(*)(const void*, size_t), int (*)(const void*, size_t, const void*, size_t));
 };
-
 const Map *new_Map(size_t, double);
 
 void print_Map(const Map*, void(*printer)(const void*));
