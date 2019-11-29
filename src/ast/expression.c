@@ -104,7 +104,6 @@ static int parse_object(const Vector *exprs,
                        program_data->class_types,
                        &object_type);
     const Map *field_names = object_type->class->field_name_to_type;
-    print_Map(field_names, print_VarType);
     if (field_names->get(field_names, name, strlen(name), vartype_ptr)) {
         fprintf(stderr,
                 "error: object does not have a field named \"%s\"\n",

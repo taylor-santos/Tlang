@@ -17,6 +17,8 @@ struct ast_program_data {
     const Vector *class_types; // Vector<ClassType*>
     const Vector *class_stmts; // Vector<Vector<ASTNode*>>
     const Vector *class_envs;
+    char ***fields;            // Aligned order of fields by name
+    size_t *field_counts;
 };
 
 struct ast_program_vtable {

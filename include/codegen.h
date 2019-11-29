@@ -10,6 +10,8 @@ typedef struct {
     const Vector *class_types;
     const Vector *class_stmts;
     const Vector *class_envs;
+    char ***fields;
+    size_t *field_counts;
     int tmp_count;
 } CodegenState;
 

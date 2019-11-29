@@ -448,18 +448,22 @@ static int copy_ObjectType(ObjectType *type, ObjectType **copy_ptr) {
     }
 }
 
-static int classcmp(ClassType *type1,
-                    ClassType *type2,
-                    TypeCheckState *state,
-                    const Map *symbols,
-                    const Map *seen) {
+int classcmp(ClassType *type1,
+             ClassType *type2,
+             TypeCheckState *state,
+             const Map *symbols,
+             const Map *seen) {
     if (type1 == type2) {
         return 0;
     }
     size_t ID1 = type1->classID, ID2 = type2->classID;
-    if (seen->contains(seen, &ID1, sizeof(ID1)) ||
-        seen->contains(seen, &ID2, sizeof(ID2))) {
-        return 1;
+    if (seen == NULL) {
+        seen = new_Map(0, 0);
+    } else {
+        if (seen->contains(seen, &ID1, sizeof(ID1)) ||
+            seen->contains(seen, &ID2, sizeof(ID2))) {
+            return 1;
+        }
     }
     safe_method_call(seen, put, &ID1, sizeof(ID1), NULL, NULL);
     safe_method_call(seen, put, &ID2, sizeof(ID2), NULL, NULL);

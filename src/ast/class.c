@@ -189,12 +189,13 @@ static int GetType_Class(const ASTNode *node,
         safe_method_call(state->new_symbols, get, i, &field);
         VarType *type_copy = NULL;
         safe_function_call(copy_VarType, field->type, &type_copy);
+        VarType *prev_type = NULL;
         safe_method_call(data->type->class->field_name_to_type,
                          put,
                          field->name,
                          strlen(field->name),
                          type_copy,
-                         NULL);
+                         &prev_type);
     }
     //Clear the new_symbols vector without freeing its elements. They have been
     //moved to the class's fields list.

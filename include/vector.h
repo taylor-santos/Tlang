@@ -21,6 +21,7 @@ struct vector {
     int    (*copy)  (const Vector *this,
                      const Vector **copy_ptr,
                      int (*val_copy)(const void*, const void*));
+    void   (*sort)  (const Vector *this, int (*comp)(const void *, const void *));
 };
 
 const Vector *new_Vector(size_t capacity);

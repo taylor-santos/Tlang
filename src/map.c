@@ -27,8 +27,7 @@ struct data {
 void print_Map(const Map *this, void (*printer)(const void *)) {
     Data *data = this->data;
     char *sep  = "";
-    printf("{\n");
-    printf("  ");
+    printf("{");
     for (size_t i = 0; i < data->capacity; i++) {
         for (Entry *curr = data->entries[i]; curr != NULL; curr = curr->next) {
             const void *val = curr->value;
@@ -36,10 +35,10 @@ void print_Map(const Map *this, void (*printer)(const void *)) {
             printf("\"%.*s\": \"", (int) curr->len, (char *) curr->key);
             if (printer) printer(val);
             printf("\"");
-            sep = ",\n  ";
+            sep = ", ";
         }
     }
-    printf("\n}\n");
+    printf("}");
 }
 
 Entry *new_Entry(

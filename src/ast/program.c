@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <codegen.h>
+#include "queue.h"
 #include "ast.h"
 #include "typechecker.h"
 #include "safe.h"
@@ -172,6 +173,39 @@ static int add_builtins(const ASTNode *node) {
     return 0;
 }
 
+void print_vector_int(const void *v) {
+    const Vector *vec = v;
+    size_t n = vec->size(vec);
+    printf("[");
+    char *sep = "";
+    for (size_t i = 0; i < n; i++) {
+        size_t j;
+        safe_method_call(vec, get, i, &j);
+        printf("%s%ld", sep, j);
+        sep = ", ";
+    }
+    printf("]");
+}
+
+void print_int(const void *i) {
+    printf("%ld", (size_t)i);
+}
+
+typedef struct {
+    void *value;
+    int count;
+} counter;
+
+static int counterSort(const void *lhs, const void *rhs) {
+    const counter *l = lhs, *r = rhs;
+    return l->count - r->count;
+}
+
+static int counterSortRev(const void *lhs, const void *rhs) {
+    const counter *l = lhs, *r = rhs;
+    return r->count - l->count;
+}
+
 static int TypeCheck_Program(const ASTNode *node) {
     safe_function_call(add_builtins, node);
     ASTProgramData *data = node->data;
@@ -180,18 +214,298 @@ static int TypeCheck_Program(const ASTNode *node) {
     state.new_symbols = new_Vector(0);
     state.program_node = node;
     state.curr_ret_type = NULL;
-    size_t size = 0;
-    ASTNode **stmt_arr = NULL;
-    safe_method_call(stmts, array, &size, &stmt_arr);
-    for (size_t i = 0; i < size; i++) {
-        ASTStatementVTable *vtable = stmt_arr[i]->vtable;
+    size_t num_stmts = stmts->size(stmts);
+    for (size_t i = 0; i < num_stmts; i++) {
+        const ASTNode *stmt = NULL;
+        safe_method_call(stmts, get, i, &stmt);
+        ASTStatementVTable *vtable = stmt->vtable;
         VarType *type = NULL;
-        if (vtable->get_type(stmt_arr[i], data->symbols, &state, &type)) {
+        if (vtable->get_type(stmt, data->symbols, &state, &type)) {
             return 1;
         }
     }
-    free(stmt_arr);
     state.new_symbols->free(state.new_symbols, free_NamedType);
+    size_t num_classes = data->class_types->size(data->class_types);
+    unsigned char *is_a = calloc(num_classes * num_classes, sizeof(*is_a));
+    counter *child_count = calloc(num_classes, sizeof(*child_count));
+    if (is_a == NULL) {
+        return 1;
+    }
+    for (size_t a = 0; a < num_classes; a++) {
+        ClassType *A = NULL;
+        safe_method_call(data->class_types, get, a, &A);
+        for (size_t b = 0; b < num_classes; b++) {
+            if (a == b) {
+                is_a[num_classes * a + b] = 1;
+            } else {
+                ClassType *B = NULL;
+                safe_method_call(data->class_types, get, b, &B);
+                is_a[num_classes * a + b] = !classcmp(A,
+                                                      B,
+                                                      &state,
+                                                      data->symbols,
+                                                      NULL);
+            }
+        }
+    }
+    const Map **field_from = malloc(sizeof(*field_from) * num_classes);
+    const Map **field_to = malloc(sizeof(*field_to) * num_classes);
+    const Map **place = malloc(sizeof(*place) * num_classes);
+    counter **from_size = malloc(sizeof(*from_size) * num_classes);
+    if (field_to == NULL ||
+        field_from == NULL ||
+        place == NULL ||
+        from_size == NULL) {
+        return 1;
+    }
+    for (size_t i = 0; i < num_classes; i++) {
+        child_count[i].value = (void*)i;
+        for (size_t j = 0; j < num_classes; j++) {
+            child_count[i].count += is_a[j * num_classes + i];
+        }
+        child_count[i].count--;
+        place[i] = new_Map(0, 0);
+        ClassType *class = NULL;
+        safe_method_call(data->class_types, get, i, &class);
+        char **field_names = NULL;
+        size_t *field_lens = NULL;
+        size_t num_fields = 0;
+        safe_method_call(class->field_name_to_type,
+                         keys,
+                         &num_fields,
+                         &field_lens,
+                         &field_names);
+        from_size[i] = calloc(num_fields, sizeof(**from_size));
+        field_from[i] = new_Map(0, 0);
+        field_to[i] = new_Map(0, 0);
+        for (size_t j = 0; j < num_fields; j++) {
+            safe_method_call(field_from[i],
+                             put,
+                             field_names[j],
+                             field_lens[j],
+                             new_Vector(0),
+                             NULL);
+            safe_method_call(field_to[i],
+                             put,
+                             field_names[j],
+                             field_lens[j],
+                             new_Vector(0),
+                             NULL);
+            safe_method_call(place[i],
+                             put,
+                             field_names[j],
+                             field_lens[j],
+                             (void*)-1,
+                             NULL);
+        }
+    }
+    for (size_t i = 0; i < num_classes; i++) {
+        ClassType *class = NULL;
+        safe_method_call(data->class_types, get, i, &class);
+        char **field_names = NULL;
+        size_t *field_lens = NULL;
+        size_t num_fields = 0;
+        safe_method_call(class->field_name_to_type,
+                         keys,
+                         &num_fields,
+                         &field_lens,
+                         &field_names);
+        for (size_t j = 0; j < num_fields; j++) {
+            VarType *field_type = NULL;
+            safe_method_call(class->field_name_to_type,
+                             get,
+                             field_names[j],
+                             field_lens[j],
+                             &field_type);
+            const Vector *from = NULL;
+            safe_method_call(field_from[i],
+                             get,
+                             field_names[j],
+                             field_lens[j],
+                             &from);
+            for (size_t fromID = 0; fromID < num_classes; fromID++) {
+                if (fromID != i && is_a[num_classes * i + fromID]) {
+                    ClassType *fromClass = NULL;
+                    safe_method_call(data->class_types,
+                                     get,
+                                     fromID,
+                                     &fromClass);
+                    if (fromClass->field_name_to_type->contains(
+                            fromClass->field_name_to_type,
+                            field_names[j],
+                            field_lens[j])) {
+                        safe_method_call(from, append, (void*)fromID);
+                        const Vector *to = NULL;
+                        safe_method_call(field_to[fromID],
+                                         get,
+                                         field_names[j],
+                                         field_lens[j],
+                                         &to);
+                        safe_method_call(to, append, (void*)i);
+                    }
+                }
+            }
+            free(field_names[j]);
+        }
+        free(field_names);
+        free(field_lens);
+    }
+    for (size_t i = 0; i < num_classes; i++) {
+        ClassType *class = NULL;
+        safe_method_call(data->class_types, get, i, &class);
+        char **field_names = NULL;
+        size_t *field_lens = NULL;
+        size_t num_fields = 0;
+        safe_method_call(class->field_name_to_type,
+                         keys,
+                         &num_fields,
+                         &field_lens,
+                         &field_names);
+        for (size_t j = 0; j < num_fields; j++) {
+            from_size[i][j].value = strndup(field_names[j], field_lens[j]);
+            const Vector *from = NULL;
+            safe_method_call(field_from[i],
+                             get,
+                             field_names[j],
+                             field_lens[j],
+                             &from);
+            size_t from_count = from->size(from);
+            for (size_t k = 0; k < from_count; k++) {
+                size_t fromID = 0;
+                safe_method_call(from, get, k, &fromID);
+                from_size[i][j].count += child_count[fromID].count;
+            }
+        }
+        qsort(from_size[i], num_fields, sizeof(*from_size[i]), counterSortRev);
+    }
+    qsort(child_count, num_classes, sizeof(*child_count), counterSort);
+    for (size_t i = 0; i < num_classes; i++) {
+        size_t c = (size_t)child_count[i].value;
+        ClassType *class = NULL;
+        safe_method_call(data->class_types, get, c, &class);
+        size_t num_fields = class->field_name_to_type->size(
+                class->field_name_to_type);
+        for (size_t j = 0; j < num_fields; j++) {
+            char *f = from_size[c][j].value;
+            size_t f_len = strlen(f);
+            size_t p = 0;
+            safe_method_call(place[c], get, f, f_len, &p);
+            if (p == (size_t)-1) {
+                safe_method_call(place[c], put, f, f_len, (void*)-2, &p);
+                const Vector *v = new_Vector(0);
+                safe_method_call(v, append, (void*)c);
+                size_t k = 0;
+                while (v->size(v) > k) {
+                    size_t l = 0;
+                    safe_method_call(v, get, k, &l);
+                    k++;
+                    {
+                        const Vector *to = NULL;
+                        safe_method_call(field_to[l], get, f, f_len, &to);
+                        size_t num_to = to->size(to);
+                        for (size_t x = 0; x < num_to; x++) {
+                            size_t t = 0;
+                            safe_method_call(to, get, x, &t);
+                            safe_method_call(place[t], get, f, f_len, &p);
+                            if (p == (size_t) -1) {
+                                safe_method_call(place[t],
+                                                 put,
+                                                 f,
+                                                 f_len,
+                                                 (void *) -2, &p);
+                                safe_method_call(v, append, (void *) t);
+                            }
+                        }
+                    }
+                    {
+                        const Vector *from = NULL;
+                        safe_method_call(field_from[l], get, f, f_len, &from);
+                        size_t num_from = from->size(from);
+                        for (size_t x = 0; x < num_from; x++) {
+                            size_t t = 0;
+                            safe_method_call(from, get, x, &t);
+                            safe_method_call(place[t], get, f, f_len, &p);
+                            if (p == (size_t) -1) {
+                                safe_method_call(place[t],
+                                                 put,
+                                                 f,
+                                                 f_len,
+                                                 (void *) -2, &p);
+                                safe_method_call(v, append, (void *) t);
+                            }
+                        }
+                    }
+                }
+                const Map *avail = new_Map(0, 0);
+                size_t v_size = v->size(v);
+                for (size_t x = 0; x < v_size; x++) {
+                    size_t t = 0;
+                    safe_method_call(v, get, x, &t);
+                    char **keys = NULL;
+                    size_t *key_lens = NULL, num_keys;
+                    safe_method_call(place[t],
+                                     keys,
+                                     &num_keys,
+                                     &key_lens,
+                                     &keys);
+                    for (size_t y = 0; y < num_keys; y++) {
+                        safe_method_call(place[t],
+                                         get,
+                                         keys[y],
+                                         key_lens[y],
+                                         &p);
+                        if (p != (size_t)-1 && p != (size_t)-2) {
+                            safe_method_call(avail,
+                                             put,
+                                             &p,
+                                             sizeof(p),
+                                             (void*)p,
+                                             &p);
+                        }
+                    }
+                }
+                p = 0;
+                while (avail->contains(avail, &p, sizeof(p))) {
+                    p++;
+                }
+                for (size_t x = 0; x < v_size; x++) {
+                    size_t t = 0;
+                    safe_method_call(v, get, x, &t);
+                    size_t old;
+                    safe_method_call(place[t],
+                                     put,
+                                     f,
+                                     f_len,
+                                     (void*)p,
+                                     &old);
+                }
+            }
+        }
+    }
+    data->fields = malloc(num_classes * sizeof(*data->fields));
+    data->field_counts = malloc(num_classes * sizeof(*data->field_counts));
+    for (size_t i = 0; i < num_classes; i++) {
+        size_t max = 0;
+        char **keys = NULL;
+        size_t *key_lens = NULL, num_keys;
+        safe_method_call(place[i],
+                         keys,
+                         &num_keys,
+                         &key_lens,
+                         &keys);
+        for (size_t j = 0; j < num_keys; j++) {
+            size_t index = 0;
+            safe_method_call(place[i], get, keys[j], key_lens[j], &index);
+            if (index > max) max = index;
+        }
+        data->fields[i] = calloc(max + 1, sizeof(**data->fields));
+        data->field_counts[i] = max + 1;
+        for (size_t j = 0; j < num_keys; j++) {
+            size_t index = 0;
+            safe_method_call(place[i], get, keys[j], key_lens[j], &index);
+            data->fields[i][index] = strndup(keys[j], key_lens[j]);
+        }
+    }
     return 0;
 }
 

@@ -79,24 +79,24 @@ static int GetType_Function(const ASTNode *node,
         free_VarType(prev_self);
     }
     FuncType *signature = data->type->function;
-    NamedType **args = NULL;
-    size_t num_args;
-    safe_method_call(signature->named_args, array, &num_args, &args);
+    size_t num_args = signature->named_args->size(signature->named_args);
     data->args = new_Map(0, 0);
     for (size_t i = 0; i < num_args; i++) {
+        NamedType *arg = NULL;
+        safe_method_call(signature->named_args, get, i, &arg);
         VarType *type_copy = NULL;
-        if (args[i]->type->type == REFERENCE) {
+        if (arg->type->type == REFERENCE) {
             safe_function_call(copy_VarType,
-                               args[i]->type->sub_type,
+                               arg->type->sub_type,
                                &type_copy);
         } else {
-            safe_function_call(copy_VarType, args[i]->type, &type_copy);
+            safe_function_call(copy_VarType, arg->type, &type_copy);
         }
-        size_t arg_len = strlen(args[i]->name);
+        size_t arg_len = strlen(arg->name);
         VarType *prev_type = NULL;
         safe_method_call(data->symbols,
                          put,
-                         args[i]->name,
+                         arg->name,
                          arg_len,
                          type_copy,
                          &prev_type);
@@ -105,9 +105,8 @@ static int GetType_Function(const ASTNode *node,
             fprintf(stderr, "warning: possible type conflict\n");
             free_VarType(prev_type);
         }
-        safe_method_call(data->args, put, args[i]->name, arg_len, NULL, NULL);
+        safe_method_call(data->args, put, arg->name, arg_len, NULL, NULL);
     }
-    free(args);
     size_t stmt_count = data->stmts->size(data->stmts);
     VarType *prev_ret_type = state->curr_ret_type;
     state->curr_ret_type = NULL;

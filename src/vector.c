@@ -145,6 +145,11 @@ static int vector_copy(const Vector *this,
     return 0;
 }
 
+static void sort(const Vector *this, int (*comp)(const void *, const void *)) {
+    struct vector_data *data = this->data;
+    qsort(data->values, data->size, sizeof(*data->values), comp);
+}
+
 const Vector *new_Vector(size_t capacity) {
     struct vector_data *data = malloc(sizeof(*data));
     if (data == NULL) {
@@ -174,5 +179,6 @@ const Vector *new_Vector(size_t capacity) {
     vector->free   = vector_free;
     vector->clear  = vector_clear;
     vector->copy   = vector_copy;
+    vector->sort   = sort;
     return vector;
 }

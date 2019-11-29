@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include "safe.h"
 #include "builtins.h"
 #include "map.h"
@@ -140,10 +141,6 @@ static int define_classes(CodegenState *state, FILE *out) {
         safe_method_call(state->class_types, get, i, &class);
         fprintf(out, "struct class%ld {\n", i);
         state->indent++;
-        if (i < BUILTIN_COUNT) {
-            print_indent(state->indent, out);
-            fprintf(out, "%sval;\n", BUILTIN_TYPES[i]);
-        }
         size_t field_count;
         char **fields = NULL;
         size_t *field_lengths = NULL;
@@ -151,19 +148,28 @@ static int define_classes(CodegenState *state, FILE *out) {
                          keys,
                          &field_count,
                          &field_lengths, &fields);
-        for (size_t j = 0; j < field_count; j++) {
-            VarType *field = NULL;
-            safe_method_call(class->field_name_to_type,
-                             get,
-                             fields[j],
-                             field_lengths[j],
-                             &field);
-            print_indent(state->indent, out);
-            fprintf(out, "void *");
-            if (field->is_ref) {
-                fprintf(out, "*");
+        size_t space_count = 0;
+        for (size_t j = 0; j < state->field_counts[i]; j++) {
+            if (state->fields[i][j] == NULL) {
+                fprintf(out, "void *space%ld;", space_count++);
+            } else {
+                VarType *field = NULL;
+                safe_method_call(class->field_name_to_type,
+                                 get,
+                                 state->fields[i][j],
+                                 strlen(state->fields[i][j]),
+                                 &field);
+                print_indent(state->indent, out);
+                fprintf(out, "void *");
+                if (field->is_ref) {
+                    fprintf(out, "*");
+                }
+                fprintf(out, "field_%s;\n", state->fields[i][j]);
             }
-            fprintf(out, "field_%.*s;\n", (int)field_lengths[j], fields[j]);
+        }
+        if (i < BUILTIN_COUNT) {
+            print_indent(state->indent, out);
+            fprintf(out, "%sval;\n", BUILTIN_TYPES[i]);
         }
         state->indent--;
         fprintf(out, "};\n");
@@ -409,17 +415,14 @@ static int define_functions(CodegenState *state, FILE *out) {
                             env_index++);
                 }
             }
-
-            ASTNode **stmts = NULL;
-            size_t stmt_count;
-            safe_method_call(data->stmts, array, &stmt_count, &stmts);
+            size_t stmt_count = data->stmts->size(data->stmts);
             for (size_t j = 0; j < stmt_count; j++) {
-                ASTNode *stmt = stmts[j];
+                ASTNode *stmt = NULL;
+                safe_method_call(data->stmts, get, j, &stmt);
                 ASTNodeVTable *vtable = stmt->vtable;
                 char *code = vtable->codegen(stmt, state, out);
                 free(code);
             }
-            free(stmts);
 
             for (size_t j = 0; j < env_count; j++) {
                 print_indent(1, out);
@@ -489,34 +492,17 @@ int define_main(ASTProgramData *data, CodegenState *state, FILE *out) {
                 state->tmp_count++);
     }
 
-    ASTNode **stmts = NULL;
-    size_t stmt_count;
-    safe_method_call(data->statements, array, &stmt_count, &stmts);
+    size_t stmt_count = data->statements->size(data->statements);
     for (size_t i = 0; i < stmt_count; i++) {
-        ASTNode *stmt = stmts[i];
+        ASTNode *stmt = NULL;
+        safe_method_call(data->statements, get, i, &stmt);
         ASTStatementVTable *vtable = stmt->vtable;
         char *code = vtable->codegen(stmt, state, out);
         free(code);
     }
-    free(stmts);
     state->indent--;
     fprintf(out, "}\n");
     fprintf(out, "\n");
-    return 0;
-}
-
-
-int orderFields(CodegenState *state) {
-    size_t num_classes = state->class_types->size(state->class_types);
-    struct pair {
-        char *name;
-        VarType *type;
-    };
-    for (size_t i = 0; i < num_classes; i++) {
-        ClassType *class = NULL;
-        safe_method_call(state->class_types, get, i, &class);
-
-    }
     return 0;
 }
 
@@ -534,6 +520,8 @@ int GenerateCode(const ASTNode *program, FILE *out) {
     codegen_state->class_types = data->class_types;
     codegen_state->class_stmts = data->class_stmts;
     codegen_state->class_envs  = data->class_envs;
+    codegen_state->fields = data->fields;
+    codegen_state->field_counts = data->field_counts;
 
     include_headers(out);
     define_closures(out);

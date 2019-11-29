@@ -63,6 +63,11 @@ int typecmp(const VarType *type1,
             TypeCheckState *state,
             const Map *symbols,
             const Map *seen);
+int classcmp(ClassType *type1,
+             ClassType *type2,
+             TypeCheckState *state,
+             const Map *symbols,
+             const Map *seen);
 int copy_VarType(const void *type, const void *copy_ptr);
 void print_VarType(const void*);
 int getObjectClass(ObjectType *object,
