@@ -97,13 +97,13 @@ static int parse_object(const Vector *exprs,
     }
     //Node might be a field
     ASTProgramData *program_data = state->program_node->data;
-    VarType *object_type = NULL;
+    ClassType *class = NULL;
     safe_function_call(getObjectClass,
                        (*vartype_ptr)->object,
                        symbols,
                        program_data->class_types,
-                       &object_type);
-    const Map *field_names = object_type->class->field_name_to_type;
+                       &class);
+    const Map *field_names = class->field_name_to_type;
     if (field_names->get(field_names, name, strlen(name), vartype_ptr)) {
         fprintf(stderr,
                 "error: object does not have a field named \"%s\"\n",
@@ -115,7 +115,8 @@ static int parse_object(const Vector *exprs,
     expr->expr_type = EXPR_FIELD;
     expr->sub_expr = *expr_ptr;
     expr->name = name;
-    expr->type = object_type;
+    expr->type = malloc(sizeof(*expr->type));
+    expr->type->class = class;
     safe_method_call(exprs, get, *index-1, &expr->node);
 
     *expr_ptr = expr;
@@ -473,11 +474,10 @@ char *gen_expression(Expression *expr, CodegenState *state, FILE *out) {
             asprintf(&tmp, "tmp%d", state->tmp_count++);
             sub_expr = gen_expression(expr->sub_expr, state, out);
             print_indent(state->indent, out);
-            VarType *expr_type = expr->type;
             fprintf(out,
                     "void *%s = ((class%d*)%s)->field_%s;\n",
                     tmp,
-                    expr_type->class->classID,
+                    expr->type->class->classID,
                     sub_expr,
                     expr->name);
             return tmp;
@@ -498,19 +498,7 @@ char *gen_expression(Expression *expr, CodegenState *state, FILE *out) {
             print_indent(state->indent, out);
             fprintf(out, "void *%s = call(%s", tmp, func);
             if (expr->arg != NULL) {
-                fprintf(out, ", ");
-                FuncType *function = expr->sub_expr->type->function;
-                size_t num_args = function->named_args->size(
-                        function->named_args);
-                for (size_t i = 0; i < num_args; i++) {
-                    NamedType *named_arg = NULL;
-                    safe_method_call(function->named_args, get, i, &named_arg);
-                    if (named_arg->type->type != REFERENCE &&
-                        expr->arg->type->is_ref) {
-                        fprintf(out, "*");
-                    }
-                }
-                fprintf(out, "%s", arg);
+                fprintf(out, ", %s", arg);
             }
             fprintf(out, ");\n");
             return tmp;

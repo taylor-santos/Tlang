@@ -91,15 +91,18 @@ static char *CodeGen_Return(const ASTNode *node,
                             CodegenState *state,
                             FILE *out) {
     const ASTReturnData *data = node->data;
-    char *ret = strdup("return");
     if (data->returns != NULL) {
         const ASTNode *ret_node = data->returns;
         ASTStatementVTable *ret_vtable = ret_node->vtable;
         char *code = ret_vtable->codegen(ret_node, state, out);
-        append_string(&ret, " %s", code);
+        print_indent(state->indent, out);
+        fprintf(out, "return %s;\n", code);
         free(code);
+    } else {
+        print_indent(state->indent, out);
+        fprintf(out, "return;\n");
     }
-    return ret;
+    return NULL;
 }
 
 const ASTNode *new_ReturnNode(struct YYLTYPE *loc, const void *value) {

@@ -83,6 +83,7 @@ static int GetType_Class(const ASTNode *node,
     // Add "self" object to class's symbol table
     VarType *self_type = NULL;
     safe_function_call(copy_VarType, data->type->class->instance, &self_type);
+    self_type->is_ref = 0;
     VarType *prev_self = NULL;
     char *self_name = "self";
     safe_method_call(data->symbols,

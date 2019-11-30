@@ -80,6 +80,30 @@ static void define_builtins(FILE *out) {
     fprintf(out, "}\n");
     fprintf(out, "\n");
     for (size_t i = 0; i < BUILTIN_COUNT; i++) {
+        if (i != STRING) {
+            for (size_t j = 0; j < BINARY_COUNT; j++) {
+                fprintf(out, "void *class%ld_0x", i);
+                const char *c = BINARIES[j];
+                do {
+                    fprintf(out, "%X", *c);
+                } while (*(++c));
+                fprintf(out, "(closure *c, class%ld *other) {\n", i);
+                print_indent(1, out);
+                fprintf(out, "#define var_self ((class%ld*)c->env[0])\n", i);
+                print_indent(1, out);
+                fprintf(out, "class%ld *ret = new_class%ld(NULL);\n", i, i);
+                print_indent(1, out);
+                fprintf(out,
+                        "ret->val = var_self->val %s other->val;\n",
+                        BINARIES[j]);
+                print_indent(1, out);
+                fprintf(out, "return ret;\n");
+                print_indent(1, out);
+                fprintf(out, "#undef var_self\n");
+                fprintf(out, "}\n");
+            }
+        }
+
         fprintf(out, "void *class%ld_toString(closure *c, class%ld "
                      "*self) {\n", i, i);
         switch((BUILTINS)i) {
@@ -191,6 +215,16 @@ static int define_classes(CodegenState *state, FILE *out) {
             if (i < BUILTIN_COUNT) {
                 fprintf(out, "void *class%ld_toString(closure *c, class%ld "
                              "*self);\n", i, i);
+                if (i != STRING) {
+                    for (size_t j = 0; j < BINARY_COUNT; j++) {
+                        fprintf(out, "void *class%ld_0x", i);
+                        const char *c = BINARIES[j];
+                        do {
+                            fprintf(out, "%X", *c);
+                        } while (*(++c));
+                        fprintf(out, "(closure *c, class%ld *other);\n", i);
+                    }
+                }
             }
             fprintf(out,
                     "void init%ld(closure *c, class%ld *var_self) {\n",
@@ -257,6 +291,28 @@ static int define_classes(CodegenState *state, FILE *out) {
                         i);
                 print_indent(state->indent, out);
                 fprintf(out, "var_toString = tmp%d;\n", state->tmp_count++);
+                if (i != STRING) {
+                    for (size_t j = 0; j < BINARY_COUNT; j++) {
+                        print_indent(state->indent, out);
+                        fprintf(out,
+                                "build_closure(tmp%d, class%ld_0x",
+                                state->tmp_count,
+                                i);
+                        const char *c = BINARIES[j];
+                        do {
+                            fprintf(out, "%X", *c);
+                        } while (*(++c));
+                        fprintf(out, ", var_self)\n");
+                        print_indent(state->indent, out);
+                        fprintf(out, "var_0x");
+                        c = BINARIES[j];
+                        do {
+                            fprintf(out, "%X", *c);
+                        } while (*(++c));
+                        fprintf(out, " = tmp%d;\n", state->tmp_count++);
+                    }
+                }
+
                 print_indent(state->indent, out);
                 fprintf(out, "var_self->val = 0;\n");
             }

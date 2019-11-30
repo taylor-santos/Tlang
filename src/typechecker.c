@@ -18,14 +18,19 @@ static int copy_ObjectType(ObjectType *type, ObjectType **copy_ptr);
 int getObjectClass(ObjectType *object,
                    const Map *symbols,
                    const Vector *classTypes,
-                   VarType **type_ptr) {
+                   ClassType **type_ptr) {
     if (object->id_type == ID) {
         return classTypes->get(classTypes, object->classID, type_ptr);
     } else if (object->id_type == NAME) {
-        return symbols->get(symbols,
-                            object->name,
-                            strlen(object->name),
-                            type_ptr);
+        VarType *type = NULL;
+        if (symbols->get(symbols,
+                         object->name,
+                         strlen(object->name),
+                         &type)) {
+            return 1;
+        }
+        *type_ptr = type->class;
+        return 0;
     } else {
         print_ICE("ill-formed object type");
     }
@@ -483,8 +488,8 @@ int classcmp(ClassType *type1,
                 fields[i],
                 field_lengths[i],
                 &given_type)) {
-            valid = 0;
-            break;
+                valid = 0;
+                break;
         }
         VarType *expected_type = NULL;
         safe_method_call(type2->field_name_to_type,

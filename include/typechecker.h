@@ -73,7 +73,7 @@ void print_VarType(const void*);
 int getObjectClass(ObjectType *object,
                    const Map *symbols,
                    const Vector *classTypes,
-                   VarType **type_ptr);
+                   ClassType **type_ptr);
 
 void free_VarType(void*);
 void free_FuncType(void*);

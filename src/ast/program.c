@@ -68,6 +68,7 @@ static int add_builtins(const ASTNode *node) {
             if (new_ObjectType(&object_type)) return 1;
             object_type->object->id_type = ID;
             object_type->object->classID = classID;
+            object_type->is_ref = 0;
             safe_method_call(class_type->field_name_to_type,
                              put,
                              "val",
@@ -90,7 +91,7 @@ static int add_builtins(const ASTNode *node) {
                              toString_type,
                              NULL);
         }
-        {
+        for (size_t i = 0; i < BINARY_COUNT; i++) {
             const Vector *args = new_Vector(0);
             VarType *arg_type = NULL;
             safe_function_call(new_ObjectType, &arg_type);
@@ -105,12 +106,19 @@ static int add_builtins(const ASTNode *node) {
             ret_type->object->classID = classID;
             VarType *func_type = NULL;
             safe_function_call(new_FuncType, args, ret_type, &func_type);
+            char *name = NULL;
+            safe_strdup(&name, "0x");
+            const char *c = BINARIES[i];
+            do {
+                append_string(&name, "%X", *c);
+            } while (*(++c));
             safe_method_call(class_type->field_name_to_type,
                              put,
-                             "0x3D",
-                             strlen("0x3D"),
+                             name,
+                             strlen(name),
                              func_type,
                              NULL);
+            free(name);
         }
 
         safe_method_call(data->class_types, append, class_type);

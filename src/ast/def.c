@@ -130,34 +130,29 @@ static int GetType_Def(const ASTNode *node,
         VarType *prev_type = NULL;
         VarType *expected_type = *type_ptr;
         VarType *type_copy = NULL;
-        if (!symbols->get(symbols,
-                          lhs_data->name,
-                          strlen(lhs_data->name),
-                          &prev_type)) {
-            if (typecmp(prev_type, expected_type, state, symbols, NULL)) {
-                //TODO: Handle def to incompatible type
-                fprintf(stderr,
-                        "error: assignment to incompatible type\n");
-                return 1;
-            }
-            lhs_data->type = prev_type;
-        } else {
-            safe_function_call(copy_VarType, expected_type, &type_copy);
-            safe_method_call(symbols,
-                             put,
-                             lhs_data->name,
-                             strlen(lhs_data->name),
-                             type_copy,
-                             NULL);
-            lhs_data->type = type_copy;
-            safe_function_call(copy_VarType, expected_type, &type_copy);
-            NamedType *new_symbol = NULL;
-            safe_function_call(new_NamedType,
-                               strdup(lhs_data->name),
-                               type_copy,
-                               &new_symbol);
-            safe_method_call(state->new_symbols, append, new_symbol);
+        safe_function_call(copy_VarType, expected_type, &type_copy);
+        safe_method_call(symbols,
+                         put,
+                         lhs_data->name,
+                         strlen(lhs_data->name),
+                         type_copy,
+                         &prev_type);
+
+        if (prev_type != NULL &&
+            typecmp(expected_type, prev_type, state, symbols, NULL)) {
+            //TODO: Handle def to incompatible type
+            fprintf(stderr,
+                    "error: assignment to incompatible type\n");
+            return 1;
         }
+        lhs_data->type = type_copy;
+        safe_function_call(copy_VarType, expected_type, &type_copy);
+        NamedType *new_symbol = NULL;
+        safe_function_call(new_NamedType,
+                strdup(lhs_data->name),
+                type_copy,
+                &new_symbol);
+        safe_method_call(state->new_symbols, append, new_symbol);
     }
 
     data->type = *type_ptr;
