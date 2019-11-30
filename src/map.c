@@ -284,6 +284,7 @@ int map_set_hash(const Map *this,
     for (size_t i = 0; i < data->capacity; i++) {
         for (Entry *old = data->entries[i]; old != NULL;) {
             unsigned long h = hashfn(old->key, old->len) % data->capacity;
+            old->hash = h;
             Entry **n;
             for (n = &new_entries[h]; *n != NULL; n = &(*n)->next) {
                 if (keycmpfn((old)->key, old->len, (*n)->key, (*n)->len) <= 0) {

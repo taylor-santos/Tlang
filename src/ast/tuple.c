@@ -96,7 +96,7 @@ static char *CodeGen_Tuple(const ASTNode *node,
     for (size_t i = 0; i < size; i++) {
         fprintf(out, ", %s", exprs[i]);
     }
-    fprintf(out, ")");
+    fprintf(out, ")\n");
     return ret;
 }
 

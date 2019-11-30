@@ -555,13 +555,6 @@ int typecmp(const VarType *type1,
     if (type1 == NULL || type2 == NULL) {
         return type1 != type2;
     }
-    if (type2->type == REFERENCE) {
-        if (type1->is_ref) {
-            type2 = type2->sub_type;
-        } else {
-            return 1;
-        }
-    }
     if (type1->type != type2->type) {
         return 1;
     }
@@ -640,7 +633,7 @@ static int funccmp(const FuncType *type1,
                       *arg2 = NULL;
             safe_method_call(type1->named_args, get, i, &arg1);
             safe_method_call(type2->named_args, get, i, &arg2);
-            if (typecmp(arg1->type, arg2->type, state, symbols, NULL)) {
+            if (typecmp(arg1->type, arg2->type, state, symbols, seen)) {
                 ret = 1;
                 break;
             }

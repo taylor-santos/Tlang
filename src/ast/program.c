@@ -90,6 +90,28 @@ static int add_builtins(const ASTNode *node) {
                              toString_type,
                              NULL);
         }
+        {
+            const Vector *args = new_Vector(0);
+            VarType *arg_type = NULL;
+            safe_function_call(new_ObjectType, &arg_type);
+            arg_type->object->id_type = ID;
+            arg_type->object->classID = classID;
+            NamedType *arg = NULL;
+            safe_function_call(new_NamedType, strdup("other"), arg_type, &arg);
+            safe_method_call(args, append, arg);
+            VarType *ret_type = NULL;
+            safe_function_call(new_ObjectType, &ret_type);
+            ret_type->object->id_type = ID;
+            ret_type->object->classID = classID;
+            VarType *func_type = NULL;
+            safe_function_call(new_FuncType, args, ret_type, &func_type);
+            safe_method_call(class_type->field_name_to_type,
+                             put,
+                             "0x3D",
+                             strlen("0x3D"),
+                             func_type,
+                             NULL);
+        }
 
         safe_method_call(data->class_types, append, class_type);
         VarType *type_copy = malloc(sizeof(*type_copy));
@@ -171,24 +193,6 @@ static int add_builtins(const ASTNode *node) {
                          NULL);
     }
     return 0;
-}
-
-void print_vector_int(const void *v) {
-    const Vector *vec = v;
-    size_t n = vec->size(vec);
-    printf("[");
-    char *sep = "";
-    for (size_t i = 0; i < n; i++) {
-        size_t j;
-        safe_method_call(vec, get, i, &j);
-        printf("%s%ld", sep, j);
-        sep = ", ";
-    }
-    printf("]");
-}
-
-void print_int(const void *i) {
-    printf("%ld", (size_t)i);
 }
 
 typedef struct {
@@ -436,7 +440,7 @@ static int TypeCheck_Program(const ASTNode *node) {
                         }
                     }
                 }
-                const Map *avail = new_Map(0, 0);
+                const Map *taken = new_Map(0, 0);
                 size_t v_size = v->size(v);
                 for (size_t x = 0; x < v_size; x++) {
                     size_t t = 0;
@@ -455,7 +459,7 @@ static int TypeCheck_Program(const ASTNode *node) {
                                          key_lens[y],
                                          &p);
                         if (p != (size_t)-1 && p != (size_t)-2) {
-                            safe_method_call(avail,
+                            safe_method_call(taken,
                                              put,
                                              &p,
                                              sizeof(p),
@@ -464,20 +468,19 @@ static int TypeCheck_Program(const ASTNode *node) {
                         }
                     }
                 }
-                p = 0;
-                while (avail->contains(avail, &p, sizeof(p))) {
-                    p++;
+                size_t untaken = 0;
+                while (taken->contains(taken, &untaken, sizeof(p))) {
+                    untaken++;
                 }
                 for (size_t x = 0; x < v_size; x++) {
                     size_t t = 0;
                     safe_method_call(v, get, x, &t);
-                    size_t old;
                     safe_method_call(place[t],
                                      put,
                                      f,
                                      f_len,
-                                     (void*)p,
-                                     &old);
+                                     (void*)untaken,
+                                     &p);
                 }
             }
         }

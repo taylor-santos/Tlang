@@ -499,8 +499,16 @@ char *gen_expression(Expression *expr, CodegenState *state, FILE *out) {
             fprintf(out, "void *%s = call(%s", tmp, func);
             if (expr->arg != NULL) {
                 fprintf(out, ", ");
-                if (expr->arg->type->is_ref) {
-                    fprintf(out, "*(void**)");
+                FuncType *function = expr->sub_expr->type->function;
+                size_t num_args = function->named_args->size(
+                        function->named_args);
+                for (size_t i = 0; i < num_args; i++) {
+                    NamedType *named_arg = NULL;
+                    safe_method_call(function->named_args, get, i, &named_arg);
+                    if (named_arg->type->type != REFERENCE &&
+                        expr->arg->type->is_ref) {
+                        fprintf(out, "*");
+                    }
                 }
                 fprintf(out, "%s", arg);
             }

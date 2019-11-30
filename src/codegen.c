@@ -150,8 +150,9 @@ static int define_classes(CodegenState *state, FILE *out) {
                          &field_lengths, &fields);
         size_t space_count = 0;
         for (size_t j = 0; j < state->field_counts[i]; j++) {
+            print_indent(state->indent, out);
             if (state->fields[i][j] == NULL) {
-                fprintf(out, "void *space%ld;", space_count++);
+                fprintf(out, "void *space%ld;\n", space_count++);
             } else {
                 VarType *field = NULL;
                 safe_method_call(class->field_name_to_type,
@@ -159,7 +160,6 @@ static int define_classes(CodegenState *state, FILE *out) {
                                  state->fields[i][j],
                                  strlen(state->fields[i][j]),
                                  &field);
-                print_indent(state->indent, out);
                 fprintf(out, "void *");
                 if (field->is_ref) {
                     fprintf(out, "*");
@@ -341,7 +341,11 @@ static int define_functions(CodegenState *state, FILE *out) {
                                  0,
                                  &arg);
                 print_indent(state->indent, out);
-                fprintf(out, "void *var_%s = arg;\n", arg->name);
+                fprintf(out, "void *");
+                if (arg->type->type == REFERENCE) {
+                    fprintf(out, "*");
+                }
+                fprintf(out, "var_%s = arg;\n", arg->name);
             } else {
                 for (size_t j = 0; j < arg_count; j++) {
                     NamedType *arg = NULL;
@@ -350,8 +354,11 @@ static int define_functions(CodegenState *state, FILE *out) {
                                      j,
                                      &arg);
                     print_indent(state->indent, out);
-                    fprintf(out,
-                            "void *void_%s = ((void**)arg)[%ld];\n",
+                    fprintf(out, "void *");
+                    if (arg->type->type == REFERENCE) {
+                        fprintf(out, "*");
+                    }
+                    fprintf(out, "var_%s = ((void**)arg)[%ld];\n",
                             arg->name,
                             j);
                 }

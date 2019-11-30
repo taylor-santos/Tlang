@@ -65,7 +65,7 @@ static int GetType_Ref(const ASTNode *node,
     VarType *type_copy = NULL;
     safe_function_call(copy_VarType, ref_type, &type_copy);
     safe_function_call(new_RefType, &data->type, type_copy);
-    *type_ptr = data->type->sub_type;
+    *type_ptr = data->type;
     return 0;
 }
 
