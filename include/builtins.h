@@ -7,5 +7,6 @@ extern const char *BINARIES[];
 typedef enum { INT, DOUBLE, STRING } BUILTINS;
 extern const size_t BUILTIN_COUNT;
 extern const size_t BINARY_COUNT;
+extern const size_t STRING_BINARY_COUNT;
 
 #endif//BUILTINS_H

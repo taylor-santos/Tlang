@@ -80,8 +80,8 @@ static void define_builtins(FILE *out) {
     fprintf(out, "}\n");
     fprintf(out, "\n");
     for (size_t i = 0; i < BUILTIN_COUNT; i++) {
-        if (i != STRING) {
-            for (size_t j = 0; j < BINARY_COUNT; j++) {
+        for (size_t j = 0; j < BINARY_COUNT; j++) {
+            if (i != STRING || j < STRING_BINARY_COUNT) {
                 fprintf(out, "void *class%ld_0x", i);
                 const char *c = BINARIES[j];
                 do {
@@ -215,8 +215,8 @@ static int define_classes(CodegenState *state, FILE *out) {
             if (i < BUILTIN_COUNT) {
                 fprintf(out, "void *class%ld_toString(closure *c, class%ld "
                              "*self);\n", i, i);
-                if (i != STRING) {
-                    for (size_t j = 0; j < BINARY_COUNT; j++) {
+                for (size_t j = 0; j < BINARY_COUNT; j++) {
+                    if (i != STRING || j < STRING_BINARY_COUNT) {
                         fprintf(out, "void *class%ld_0x", i);
                         const char *c = BINARIES[j];
                         do {
@@ -291,8 +291,8 @@ static int define_classes(CodegenState *state, FILE *out) {
                         i);
                 print_indent(state->indent, out);
                 fprintf(out, "var_toString = tmp%d;\n", state->tmp_count++);
-                if (i != STRING) {
-                    for (size_t j = 0; j < BINARY_COUNT; j++) {
+                for (size_t j = 0; j < BINARY_COUNT; j++) {
+                    if (i != STRING || j < STRING_BINARY_COUNT) {
                         print_indent(state->indent, out);
                         fprintf(out,
                                 "build_closure(tmp%d, class%ld_0x",

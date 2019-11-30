@@ -92,33 +92,36 @@ static int add_builtins(const ASTNode *node) {
                              NULL);
         }
         for (size_t i = 0; i < BINARY_COUNT; i++) {
-            const Vector *args = new_Vector(0);
-            VarType *arg_type = NULL;
-            safe_function_call(new_ObjectType, &arg_type);
-            arg_type->object->id_type = ID;
-            arg_type->object->classID = classID;
-            NamedType *arg = NULL;
-            safe_function_call(new_NamedType, strdup("other"), arg_type, &arg);
-            safe_method_call(args, append, arg);
-            VarType *ret_type = NULL;
-            safe_function_call(new_ObjectType, &ret_type);
-            ret_type->object->id_type = ID;
-            ret_type->object->classID = classID;
-            VarType *func_type = NULL;
-            safe_function_call(new_FuncType, args, ret_type, &func_type);
-            char *name = NULL;
-            safe_strdup(&name, "0x");
-            const char *c = BINARIES[i];
-            do {
-                append_string(&name, "%X", *c);
-            } while (*(++c));
-            safe_method_call(class_type->field_name_to_type,
-                             put,
-                             name,
-                             strlen(name),
-                             func_type,
-                             NULL);
-            free(name);
+            if (classID != STRING || i < STRING_BINARY_COUNT) {
+                const Vector *args = new_Vector(0);
+                VarType *arg_type = NULL;
+                safe_function_call(new_ObjectType, &arg_type);
+                arg_type->object->id_type = ID;
+                arg_type->object->classID = classID;
+                NamedType *arg = NULL;
+                safe_function_call(new_NamedType, strdup("other"), arg_type,
+                                   &arg);
+                safe_method_call(args, append, arg);
+                VarType *ret_type = NULL;
+                safe_function_call(new_ObjectType, &ret_type);
+                ret_type->object->id_type = ID;
+                ret_type->object->classID = classID;
+                VarType *func_type = NULL;
+                safe_function_call(new_FuncType, args, ret_type, &func_type);
+                char *name = NULL;
+                safe_strdup(&name, "0x");
+                const char *c = BINARIES[i];
+                do {
+                    append_string(&name, "%X", *c);
+                } while (*(++c));
+                safe_method_call(class_type->field_name_to_type,
+                                 put,
+                                 name,
+                                 strlen(name),
+                                 func_type,
+                                 NULL);
+                free(name);
+            }
         }
 
         safe_method_call(data->class_types, append, class_type);
