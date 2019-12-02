@@ -69,10 +69,14 @@ static int GetType_Return(const ASTNode *node,
             //TODO: Handle failed to infer type of returned value
             fprintf(stderr, "error: failed to infer type of returned value\n");
             return 1;
-        } else {
-            safe_function_call(copy_VarType, ret_type, &data->type);
-            *type_ptr = ret_type;
         }
+        if (ret_type == NULL) {
+            //TODO: Handle return none type
+            fprintf(stderr, "error: returned expression evaluates to none\n");
+            return 1;
+        }
+        safe_function_call(copy_VarType, ret_type, &data->type);
+        *type_ptr = ret_type;
     } else {
         data->type = NULL;
         *type_ptr = NULL;

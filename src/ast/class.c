@@ -80,9 +80,9 @@ static int GetType_Class(const ASTNode *node,
     safe_method_call(program_data->class_stmts, append, data->stmts);
     safe_method_call(program_data->class_envs,  append, data->env);
 
-    // Add "self" object to class's symbol table
+    // Add "self" and "this" object to class's symbol table
     VarType *self_type = NULL;
-    safe_function_call(copy_VarType, data->type->class->instance, &self_type);
+    safe_function_call(copy_VarType, data->type, &self_type);
     self_type->is_ref = 0;
     VarType *prev_self = NULL;
     char *self_name = "self";
@@ -94,6 +94,20 @@ static int GetType_Class(const ASTNode *node,
                      &prev_self);
     if (prev_self != NULL) {
         free_VarType(prev_self);
+    }
+    VarType *this_type = NULL;
+    safe_function_call(copy_VarType, data->type->class->instance, &this_type);
+    this_type->is_ref = 0;
+    VarType *prev_this = NULL;
+    char *this_name = "this";
+    safe_method_call(data->symbols,
+                     put,
+                     this_name,
+                     strlen(this_name),
+                     this_type,
+                     &prev_this);
+    if (prev_this != NULL) {
+        free_VarType(prev_this);
     }
 
     // Iterate through parent classes, collecting their fields

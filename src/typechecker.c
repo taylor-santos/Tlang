@@ -29,6 +29,9 @@ int getObjectClass(ObjectType *object,
                          &type)) {
             return 1;
         }
+        if (type->type != CLASS) {
+            return 1;
+        }
         *type_ptr = type->class;
         return 0;
     } else {

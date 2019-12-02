@@ -98,11 +98,16 @@ static int parse_object(const Vector *exprs,
     //Node might be a field
     ASTProgramData *program_data = state->program_node->data;
     ClassType *class = NULL;
-    safe_function_call(getObjectClass,
-                       (*vartype_ptr)->object,
-                       symbols,
-                       program_data->class_types,
-                       &class);
+    if(getObjectClass((*vartype_ptr)->object,
+                      symbols,
+                      program_data->class_types,
+                      &class)) {
+        //TODO: Handle failed to get object class type
+        fprintf(stderr, "error: failed to get object class type\n");
+        if ((*vartype_ptr)->object->id_type == NAME)
+            fprintf(stderr, "%s\n", (*vartype_ptr)->object->name);
+        return 1;
+    }
     const Map *field_names = class->field_name_to_type;
     if (field_names->get(field_names, name, strlen(name), vartype_ptr)) {
         fprintf(stderr,

@@ -65,6 +65,43 @@ static int GetType_Function(const ASTNode *node,
     ASTFunctionData *data = node->data;
     safe_method_call(symbols, copy, &data->symbols, copy_VarType);
     safe_method_call(data->symbols, copy, &data->env, copy_VarType);
+    FuncType *signature = data->type->function;
+    size_t num_args = signature->named_args->size(signature->named_args);
+    data->args = new_Map(0, 0);
+    ASTProgramData *program_data = state->program_node->data;
+    for (size_t i = 0; i < num_args; i++) {
+        NamedType *arg = NULL;
+        safe_method_call(signature->named_args, get, i, &arg);
+        ClassType *class = NULL;
+        if (arg->type->type != OBJECT ||
+            getObjectClass(arg->type->object,
+                           symbols,
+                           program_data->class_types,
+                           &class)) {
+            //TODO: Handle invalid argument type
+            fprintf(stderr, "error: invalid argument type\n");
+            return 1;
+        }
+        free_VarType(arg->type);
+        VarType *class_type = malloc(sizeof(*class_type));
+        class_type->type = CLASS;
+        class_type->class = class;
+        arg->type = class->instance;
+        size_t arg_len = strlen(arg->name);
+        VarType *prev_type = NULL;
+        safe_method_call(data->symbols,
+                         put,
+                         arg->name,
+                         arg_len,
+                         class_type,
+                         &prev_type);
+        if (prev_type != NULL) {
+            //TODO: Handle argument type conflict with outer scope variable
+            fprintf(stderr, "warning: possible type conflict\n");
+            free_VarType(prev_type);
+        }
+        safe_method_call(data->args, put, arg->name, arg_len, NULL, NULL);
+    }
     VarType *self_type = NULL;
     safe_function_call(copy_VarType, data->type, &self_type);
     VarType *prev_self = NULL;
@@ -77,35 +114,6 @@ static int GetType_Function(const ASTNode *node,
                      &prev_self);
     if (prev_self != NULL) {
         free_VarType(prev_self);
-    }
-    FuncType *signature = data->type->function;
-    size_t num_args = signature->named_args->size(signature->named_args);
-    data->args = new_Map(0, 0);
-    for (size_t i = 0; i < num_args; i++) {
-        NamedType *arg = NULL;
-        safe_method_call(signature->named_args, get, i, &arg);
-        VarType *type_copy = NULL;
-        if (arg->type->type == REFERENCE) {
-            safe_function_call(copy_VarType,
-                               arg->type->sub_type,
-                               &type_copy);
-        } else {
-            safe_function_call(copy_VarType, arg->type, &type_copy);
-        }
-        size_t arg_len = strlen(arg->name);
-        VarType *prev_type = NULL;
-        safe_method_call(data->symbols,
-                         put,
-                         arg->name,
-                         arg_len,
-                         type_copy,
-                         &prev_type);
-        if (prev_type != NULL) {
-            //TODO: Handle argument type conflict with outer scope variable
-            fprintf(stderr, "warning: possible type conflict\n");
-            free_VarType(prev_type);
-        }
-        safe_method_call(data->args, put, arg->name, arg_len, NULL, NULL);
     }
     size_t stmt_count = data->stmts->size(data->stmts);
     VarType *prev_ret_type = state->curr_ret_type;
@@ -147,8 +155,6 @@ static int GetType_Function(const ASTNode *node,
     }
     state->curr_ret_type = prev_ret_type;
     *type_ptr = data->type;
-    const ASTNode *program_ast = state->program_node;
-    ASTProgramData *program_data = program_ast->data;
     int *n = malloc(sizeof(int));
     if (n == NULL) {
         print_ICE("unable to allocate memory");
