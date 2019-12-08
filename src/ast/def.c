@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ast/program.h>
+#include <ast/class.h>
 #include "ast.h"
 #include "typechecker.h"
 #include "safe.h"
@@ -100,13 +101,17 @@ static int GetType_Def(const ASTNode *node,
                                  strlen(lhs_data->name),
                                  type_copy,
                                  NULL);
-                safe_function_call(copy_VarType, expected_type, &type_copy);
-                NamedType *new_symbol = NULL;
-                safe_function_call(new_NamedType,
-                                   strdup(lhs_data->name),
-                                   type_copy,
-                                   &new_symbol);
-                safe_method_call(state->new_symbols, append, new_symbol);
+                if (state->curr_class != NULL) {
+                    ASTClassData *class = state->curr_class->data;
+                    safe_function_call(copy_VarType, expected_type, &type_copy);
+                    prev_type = NULL;
+                    safe_method_call(class->type->class->field_name_to_type,
+                                     put,
+                                     lhs_data->name,
+                                     strlen(lhs_data->name),
+                                     type_copy,
+                                     &prev_type);
+                }
             } else if (typecmp(expected_type,
                                prev_type,
                                state,
@@ -146,13 +151,16 @@ static int GetType_Def(const ASTNode *node,
             return 1;
         }
         lhs_data->type = type_copy;
-        safe_function_call(copy_VarType, expected_type, &type_copy);
-        NamedType *new_symbol = NULL;
-        safe_function_call(new_NamedType,
-                strdup(lhs_data->name),
-                type_copy,
-                &new_symbol);
-        safe_method_call(state->new_symbols, append, new_symbol);
+        if (state->curr_class != NULL) {
+            ASTClassData *class = state->curr_class->data;
+            safe_function_call(copy_VarType, expected_type, &type_copy);
+            safe_method_call(class->type->class->field_name_to_type,
+                             put,
+                             lhs_data->name,
+                             strlen(lhs_data->name),
+                             type_copy,
+                             &prev_type);
+        }
     }
 
     data->type = *type_ptr;

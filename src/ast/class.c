@@ -80,9 +80,9 @@ static int GetType_Class(const ASTNode *node,
     safe_method_call(program_data->class_stmts, append, data->stmts);
     safe_method_call(program_data->class_envs,  append, data->env);
 
-    // Add "self" and "this" object to class's symbol table
+    // Add "self" object to class's symbol table
     VarType *self_type = NULL;
-    safe_function_call(copy_VarType, data->type, &self_type);
+    safe_function_call(copy_VarType, data->type->class->instance, &self_type);
     self_type->is_ref = 0;
     VarType *prev_self = NULL;
     char *self_name = "self";
@@ -95,19 +95,24 @@ static int GetType_Class(const ASTNode *node,
     if (prev_self != NULL) {
         free_VarType(prev_self);
     }
-    VarType *this_type = NULL;
-    safe_function_call(copy_VarType, data->type->class->instance, &this_type);
-    this_type->is_ref = 0;
-    VarType *prev_this = NULL;
-    char *this_name = "this";
-    safe_method_call(data->symbols,
-                     put,
-                     this_name,
-                     strlen(this_name),
-                     this_type,
-                     &prev_this);
-    if (prev_this != NULL) {
-        free_VarType(prev_this);
+    if (state->curr_class != NULL) {
+        ASTClassData *super_data = state->curr_class->data;
+        VarType *super_type = NULL;
+        safe_function_call(copy_VarType,
+                           super_data->type->class->instance,
+                           &super_type);
+        super_type->is_ref = 0;
+        VarType *prev_super = NULL;
+        char *super_name = "super";
+        safe_method_call(data->symbols,
+                         put,
+                         super_name,
+                         strlen(super_name),
+                         super_type,
+                         &prev_super);
+        if (prev_super != NULL) {
+            free_VarType(prev_super);
+        }
     }
 
     // Iterate through parent classes, collecting their fields
@@ -182,9 +187,9 @@ static int GetType_Class(const ASTNode *node,
         free(field_names);
         free(field_lengths);
     }
-
-    state->new_symbols->clear(state->new_symbols, free_NamedType);
     const Vector *stmts = data->stmts;
+    const ASTNode *prev_class = state->curr_class;
+    state->curr_class = node;
     size_t stmt_count = stmts->size(stmts);
     for (size_t i = 0; i < stmt_count; i++) {
         const ASTNode *stmt = NULL;
@@ -198,23 +203,9 @@ static int GetType_Class(const ASTNode *node,
             return 1;
         }
     }
-    size_t num_fields = state->new_symbols->size(state->new_symbols);
-    for (size_t i = 0; i < num_fields; i++) {
-        NamedType *field = NULL;
-        safe_method_call(state->new_symbols, get, i, &field);
-        VarType *type_copy = NULL;
-        safe_function_call(copy_VarType, field->type, &type_copy);
-        VarType *prev_type = NULL;
-        safe_method_call(data->type->class->field_name_to_type,
-                         put,
-                         field->name,
-                         strlen(field->name),
-                         type_copy,
-                         &prev_type);
-    }
+    state->curr_class = prev_class;
     //Clear the new_symbols vector without freeing its elements. They have been
     //moved to the class's fields list.
-    state->new_symbols->clear(state->new_symbols, NULL);
     return 0;
 }
 

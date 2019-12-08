@@ -1,7 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <codegen.h>
-#include "queue.h"
 #include "ast.h"
 #include "typechecker.h"
 #include "safe.h"
@@ -299,9 +298,9 @@ static int TypeCheck_Program(const ASTNode *node) {
     ASTProgramData *data = node->data;
     const Vector *stmts = data->statements;
     TypeCheckState state;
-    state.new_symbols = new_Vector(0);
     state.program_node = node;
     state.curr_ret_type = NULL;
+    state.curr_class = NULL;
     size_t num_stmts = stmts->size(stmts);
     for (size_t i = 0; i < num_stmts; i++) {
         const ASTNode *stmt = NULL;
@@ -312,7 +311,6 @@ static int TypeCheck_Program(const ASTNode *node) {
             return 1;
         }
     }
-    state.new_symbols->free(state.new_symbols, free_NamedType);
     size_t num_classes = data->class_types->size(data->class_types);
     unsigned char *is_a = calloc(num_classes * num_classes, sizeof(*is_a));
     counter *child_count = calloc(num_classes, sizeof(*child_count));

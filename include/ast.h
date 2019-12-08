@@ -47,6 +47,7 @@ struct ASTNodeVTable {
 struct YYLTYPE;
 struct VarType;
 
+const ASTNode *new_BoolNode(struct YYLTYPE *loc, unsigned char val);
 const ASTNode *new_ClassNode(struct YYLTYPE *loc,
                              const Vector *supers,
                              const Vector *stmts);

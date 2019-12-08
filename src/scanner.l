@@ -274,17 +274,20 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
     [/]{2}.*                  // Ignore comments
     [\\][ \t]*[\n\r]+[ \t]*   // Ignore escaped newlines
 
-    func   { push_token((Token){.type=T_FUNC}); }
+    func   { push_token((Token){.type=T_FUNC});   }
     return { push_token((Token){.type=T_RETURN}); }
-    ref    { push_token((Token){.type=T_REF}); }
-    class  { push_token((Token){.type=T_CLASS}); }
-    trait  { push_token((Token){.type=T_TRAIT}); }
-    ->     { push_token((Token){.type=T_ARROW}); }
+    ref    { push_token((Token){.type=T_REF});    }
+    class  { push_token((Token){.type=T_CLASS});  }
+    trait  { push_token((Token){.type=T_TRAIT});  }
+    ->     { push_token((Token){.type=T_ARROW});  }
     :=     { push_token((Token){.type=T_DEFINE}); }
-    !      { push_token((Token){.type=T_HOLD}); }
+    !      { push_token((Token){.type=T_HOLD});   }
+    "?"    { push_token((Token){.type=T_OPT});    }
     [:\(\),\[\];\{\}] {
         push_token((Token){.type=*yytext});
     }
+    true   { push_token((Token){.type=T_BOOL, .value.int_val=1}); }
+    false  { push_token((Token){.type=T_BOOL, .value.int_val=0}); }
 
     [0-9]+ {
         push_token((Token){.type=T_INT,    .value.int_val=atoi(yytext)});
@@ -303,7 +306,7 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
     }
 
     [ \t]+ // Ignore non-leading whitespace
-    [\~\!\%\^\*\/\+\-\=]+ {
+    [\~\!\%\^\*\/\+\-\=\|\&]+ {
         char *val;
         safe_asprintf(&val, "0x%X", yytext[0]);
         for (int i = 1; yytext[i] != '\0'; i++) {

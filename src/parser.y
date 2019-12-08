@@ -66,11 +66,13 @@
 %token T_CLASS     "class"
 %token T_TRAIT     "trait"
 %token T_DEFINE    ":="
+%token T_OPT       "?"
 %token END 0       "end of file"
 %token<int_val>    T_INT "integer"
+                   T_BOOL "bool"
 %token<double_val> T_DOUBLE "double"
 %token<str_val>    T_IDENT "identifier"
-%token<str_val>    T_STRING "string"
+                   T_STRING "string"
 
 
 %type<ast>  File Return Statement Variable Expression SubExpr Value
@@ -299,11 +301,19 @@ Value:
     {
         $$ = new_StringNode(&@$, $1);
     }
+  | T_BOOL
+    {
+        $$ = new_BoolNode(&@$, $1);
+    }
 
 FuncType:
     T_FUNC OptArgTypes OptType
     {
         new_FuncType($2, $3, &$$);
+    }
+  | T_FUNC OptArgTypes T_OPT OptType
+    {
+        new_FuncType($2, $4, &$$);
     }
 
 FuncBlock:
@@ -454,6 +464,10 @@ TypeDef:
   | '(' TypeTuple ')'
     {
         new_TupleType(&$$, $2);
+    }
+  | T_IDENT T_OPT
+    {
+
     }
 
 OptArgTypes:

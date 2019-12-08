@@ -56,7 +56,7 @@ static int GetType_Variable(const ASTNode *node,
         return 0;
     } else {
         //TODO: Handle use before init error
-        fprintf(stderr, "error: use before init\n");
+        fprintf(stderr, "error: \"%s\" used before init\n", data->name);
         return 1;
     }
 }

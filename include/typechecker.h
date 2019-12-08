@@ -52,9 +52,9 @@ struct ObjectType {
 };
 
 typedef struct {
-    const struct ASTNode *program_node;
-    const Vector *new_symbols; //Vector<NamedType*>
-    const Vector *classTypes;  //Vector<ClassType*>
+    const ASTNode *program_node;
+    const ASTNode *curr_class;
+    const Vector *classTypes;  // Vector<ClassType*>
     VarType *curr_ret_type;
 } TypeCheckState;
 

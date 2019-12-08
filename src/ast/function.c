@@ -8,6 +8,7 @@
 #include "ast/statement.h"
 #include "ast/program.h"
 #include "codegen.h"
+#include "ast/class.h"
 
 static void free_function(const void *this) {
     if (this == NULL) {
@@ -79,13 +80,12 @@ static int GetType_Function(const ASTNode *node,
                            program_data->class_types,
                            &class)) {
             //TODO: Handle invalid argument type
-            fprintf(stderr, "error: invalid argument type\n");
+            fprintf(stderr,
+                    "error: \"%s\" invalid argument type\n",
+                    arg->name);
             return 1;
         }
         free_VarType(arg->type);
-        VarType *class_type = malloc(sizeof(*class_type));
-        class_type->type = CLASS;
-        class_type->class = class;
         arg->type = class->instance;
         size_t arg_len = strlen(arg->name);
         VarType *prev_type = NULL;
@@ -93,7 +93,7 @@ static int GetType_Function(const ASTNode *node,
                          put,
                          arg->name,
                          arg_len,
-                         class_type,
+                         class->instance,
                          &prev_type);
         if (prev_type != NULL) {
             //TODO: Handle argument type conflict with outer scope variable
@@ -114,6 +114,25 @@ static int GetType_Function(const ASTNode *node,
                      &prev_self);
     if (prev_self != NULL) {
         free_VarType(prev_self);
+    }
+    if (state->curr_class != NULL) {
+        ASTClassData *super_data = state->curr_class->data;
+        VarType *super_type = NULL;
+        safe_function_call(copy_VarType,
+                           super_data->type->class->instance,
+                           &super_type);
+        super_type->is_ref = 0;
+        VarType *prev_super = NULL;
+        char *super_name = "super";
+        safe_method_call(data->symbols,
+                         put,
+                         super_name,
+                         strlen(super_name),
+                         super_type,
+                         &prev_super);
+        if (prev_super != NULL) {
+            free_VarType(prev_super);
+        }
     }
     size_t stmt_count = data->stmts->size(data->stmts);
     VarType *prev_ret_type = state->curr_ret_type;

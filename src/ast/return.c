@@ -66,8 +66,6 @@ static int GetType_Return(const ASTNode *node,
     if (ret_expr != NULL) {
         ASTRExprVTable *ret_vtable = ret_expr->vtable;
         if (ret_vtable->get_type(ret_expr, symbols, state, &ret_type)) {
-            //TODO: Handle failed to infer type of returned value
-            fprintf(stderr, "error: failed to infer type of returned value\n");
             return 1;
         }
         if (ret_type == NULL) {
