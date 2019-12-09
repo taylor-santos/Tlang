@@ -14,7 +14,8 @@ typedef struct TraitType  TraitType;
 typedef struct ObjectType ObjectType;
 
 struct VarType {
-    enum { FUNCTION, REFERENCE, HOLD, CLASS, TRAIT, OBJECT, TUPLE, PAREN } type;
+    enum { FUNCTION, REFERENCE, HOLD, CLASS, TRAIT, OBJECT, TUPLE, PAREN,
+           ERROR } type;
     union {
         FuncType *function;
         ClassType *class;
@@ -82,6 +83,7 @@ void free_ObjectType(void*);
 void free_NamedType(void*);
 
 int new_RefType   (VarType **vartype_ptr, VarType *sub_type);
+int new_ErrorType (VarType **vartype_ptr, VarType *sub_type);
 int new_TupleType (VarType **vartype_ptr, const Vector *types);
 int new_HoldType  (VarType **vartype_ptr);
 int new_ClassType (VarType **vartype_ptr);

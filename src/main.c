@@ -99,8 +99,8 @@ int main(int argc, char *argv[]) {
             status = 1;
         } else {
             ASTProgramVTable *vtable = AST->vtable;
-            //vtable->json(AST, 0, stdout);
-            //printf("\n");
+            vtable->json(AST, 0, stdout);
+            printf("\n");
             if (!vtable->type_check(AST)) {
                 ASTProgramData *data = AST->data;
                 print_Map(data->symbols, print_VarType);
@@ -109,7 +109,7 @@ int main(int argc, char *argv[]) {
             } else {
                 printf("Type checker failed!\n");
             }
-            // vtable->free(AST);
+            vtable->free(AST);
         }
 
         yy_delete_buffer(state, scanner);

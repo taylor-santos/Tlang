@@ -261,7 +261,7 @@ static int define_classes(CodegenState *state, FILE *out) {
     for (size_t i = 0; i < num_classes; i++) {
         fprintf(out, "typedef struct class%ld class%ld;\n", i, i);
         fprintf(out, "void *new_class%ld(closure *c);\n", i);
-        fprintf(out, "void init%ld(closure *c, class%ld *var_self);\n", i, i);
+        fprintf(out, "void init%ld(closure *c, class%ld *var_this);\n", i, i);
     }
     fprintf(out, "\n");
     fprintf(out, "/* Define Classes */\n");
@@ -307,13 +307,13 @@ static int define_classes(CodegenState *state, FILE *out) {
             state->indent++;
             print_indent(state->indent, out);
             fprintf(out,
-                    "class%d *var_self = malloc(sizeof(class%d));\n",
+                    "class%d *var_this = malloc(sizeof(class%d));\n",
                     class->classID,
                     class->classID);
             print_indent(state->indent, out);
-            fprintf(out, "init%d(c, var_self);\n", class->classID);
+            fprintf(out, "init%d(c, var_this);\n", class->classID);
             print_indent(state->indent, out);
-            fprintf(out, "return var_self;\n");
+            fprintf(out, "return var_this;\n");
             state->indent--;
             print_indent(state->indent, out);
             fprintf(out, "}\n");
@@ -346,14 +346,14 @@ static int define_classes(CodegenState *state, FILE *out) {
                 }
             }
             fprintf(out,
-                    "void init%ld(closure *c, class%ld *var_self) {\n",
+                    "void init%ld(closure *c, class%ld *var_this) {\n",
                     i,
                     i);
             state->indent++;
             for (size_t j = 0; j < field_count; j++) {
                 print_indent(state->indent, out);
                 fprintf(out,
-                        "#define var_%.*s var_self->field_%.*s\n",
+                        "#define var_%.*s var_this->field_%.*s\n",
                         (int) field_lengths[j],
                         fields[j],
                         (int) field_lengths[j],
@@ -379,9 +379,30 @@ static int define_classes(CodegenState *state, FILE *out) {
                 }
             }
             print_indent(1, out);
+            fprintf(out, "build_closure(var_self, new_class%ld", i);
+            const char **symbols = NULL;
+            size_t *lengths, symbol_count;
+            const Map *class_env = NULL;
+            safe_method_call(state->class_envs, get, i, &class_env);
+            safe_method_call(class_env,
+                             keys,
+                             &symbol_count,
+                             &lengths,
+                             &symbols);
+            for (size_t j = 0; j < symbol_count; j++) {
+                VarType *var_type = NULL;
+                safe_method_call(class_env, get, symbols[j], lengths[j], &var_type);
+                if (var_type->type != TRAIT) {
+                    fprintf(out, ", var_%.*s", (int) lengths[j], symbols[j]);
+                }
+                free((void *) symbols[j]);
+            }
+            free(lengths);
+            free(symbols);
+            fprintf(out, ")\n");
             if (i < BUILTIN_COUNT) {
                 print_indent(state->indent, out);
-                fprintf(out, "var_val = var_self;\n");
+                fprintf(out, "var_val = var_this;\n");
             }
             size_t super_count = class->supers->size(class->supers);
             for (size_t j = 0; j < super_count; j++) {
@@ -389,7 +410,7 @@ static int define_classes(CodegenState *state, FILE *out) {
                 safe_method_call(class->supers, get, j, &superID);
                 print_indent(state->indent, out);
                 fprintf(out,
-                        "init%ld(c, (class%ld*)var_self);\n",
+                        "init%ld(c, (class%ld*)var_this);\n",
                         superID,
                         superID);
             }
@@ -406,14 +427,14 @@ static int define_classes(CodegenState *state, FILE *out) {
             if (i < BUILTIN_COUNT) {
                 print_indent(state->indent, out);
                 fprintf(out,
-                        "build_closure(tmp%d, class%ld_toString, var_self)\n",
+                        "build_closure(tmp%d, class%ld_toString, var_this)\n",
                         state->tmp_count,
                         i);
                 print_indent(state->indent, out);
                 fprintf(out, "var_toString = tmp%d;\n", state->tmp_count++);
                 print_indent(state->indent, out);
                 fprintf(out,
-                        "build_closure(tmp%d, class%ld_0x%X, var_self)\n",
+                        "build_closure(tmp%d, class%ld_0x%X, var_this)\n",
                         state->tmp_count,
                         i,
                         '=');
@@ -431,7 +452,7 @@ static int define_classes(CodegenState *state, FILE *out) {
                             do {
                                 fprintf(out, "%X", *c);
                             } while (*(++c));
-                            fprintf(out, ", var_self)\n");
+                            fprintf(out, ", var_this)\n");
                             print_indent(state->indent, out);
                             fprintf(out, "var_0x");
                             c = BINARIES[j];
@@ -452,7 +473,7 @@ static int define_classes(CodegenState *state, FILE *out) {
                         do {
                             fprintf(out, "%X", *c);
                         } while (*(++c));
-                        fprintf(out, ", var_self)\n");
+                        fprintf(out, ", var_this)\n");
                         print_indent(state->indent, out);
                         fprintf(out, "var_0x");
                         c = BOOL_BINARIES[j];
@@ -464,10 +485,8 @@ static int define_classes(CodegenState *state, FILE *out) {
                 }
 
                 print_indent(state->indent, out);
-                fprintf(out, "var_self->val = 0;\n");
+                fprintf(out, "var_this->val = 0;\n");
             }
-            print_indent(1, out);
-            fprintf(out, "#undef var_self\n");
             for (size_t j = 0; j < env_count; j++) {
                 print_indent(1, out);
                 fprintf(out, "#undef var_%.*s\n", (int) env_lengths[j], env[j]);
@@ -631,6 +650,8 @@ static int define_functions(CodegenState *state, FILE *out) {
                             env_index++);
                 }
             }
+            print_indent(1, out);
+            fprintf(out, "#define var_super var_self\n");
             size_t stmt_count = data->stmts->size(data->stmts);
             for (size_t j = 0; j < stmt_count; j++) {
                 ASTNode *stmt = NULL;
@@ -639,7 +660,8 @@ static int define_functions(CodegenState *state, FILE *out) {
                 char *code = vtable->codegen(stmt, state, out);
                 free(code);
             }
-
+            print_indent(1, out);
+            fprintf(out, "#undef var_super\n");
             for (size_t j = 0; j < env_count; j++) {
                 print_indent(1, out);
                 fprintf(out, "#undef var_%.*s\n",

@@ -132,10 +132,17 @@ static int GetType_Def(const ASTNode *node,
         const ASTNode *lhs_node = NULL;
         safe_method_call(lhs, get, 0, &lhs_node);
         ASTLExprData *lhs_data = lhs_node->data;
-        VarType *prev_type = NULL;
         VarType *expected_type = *type_ptr;
         VarType *type_copy = NULL;
         safe_function_call(copy_VarType, expected_type, &type_copy);
+        if (lhs_data->type != NULL &&
+            typecmp(expected_type, lhs_data->type, state, symbols, NULL)) {
+            //TODO: Handle def to incompatible type
+            fprintf(stderr,
+                    "error: assignment to incompatible type\n");
+            return 1;
+        }
+        VarType *prev_type = NULL;
         safe_method_call(symbols,
                          put,
                          lhs_data->name,

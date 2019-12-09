@@ -60,6 +60,9 @@
 %token T_NEWLINE   "line break"
 %token T_FUNC      "func"
 %token T_RETURN    "return"
+%token T_IF        "if"
+%token T_THEN      "then"
+%token T_ELSE      "else"
 %token T_REF       "ref"
 %token T_HOLD      "!"
 %token T_ARROW     "->"
@@ -75,12 +78,13 @@
                    T_STRING "string"
 
 
-%type<ast>  File Return Statement Variable Expression SubExpr Value
-            FuncBlock ClassBlock TraitBlock
+%type<ast>  File Return Statement Variable Expression SubExpr Value FuncBlock
+            ClassBlock TraitBlock IfBlock StatementLine
 %type<vec>  Statements ReturnStatements OneLineStatementsList OneLineStatements
             OneLineReturnStatements OptRefExpr ExprChain OptTypes Tuple
             OptArgTypes Variables OptNameArgs NameArgs TypesList TypeTuple 
             TypeStatements OneLineTypeStmtsList OneLineTypeStmts IdentsList
+            OptElseBlock ElseBlock
 %type<type> FuncType OptType Type TypeDef
 %type<named_type> NamedType
 
@@ -99,17 +103,17 @@ File:
     }
 
 Statements:
-    Statement T_NEWLINE
+    StatementLine
     {
         $$ = new_Vector(0);
         $$->append($$, $1);
     }
-  | OneLineStatementsList Statement T_NEWLINE
+  | OneLineStatementsList StatementLine
     {
         $$ = $1;
         $$->append($$, $2);
     }
-  | Statements Statement T_NEWLINE
+  | Statements StatementLine
     {
         $$ = $1;
         $$->append($$, $2);
@@ -187,6 +191,16 @@ Return:
         $$ = new_ReturnNode(&@$, $2);
     }
 
+StatementLine:
+    Statement T_NEWLINE
+    {
+        $$ = $1;
+    }
+  | IfBlock
+    {
+        $$ = $1;
+    }
+
 Statement:
     Expression
     {
@@ -238,9 +252,9 @@ Expression:
         $$ = $1;
     }
   | TraitBlock
-      {
-          $$ = $1;
-      }
+    {
+        $$ = $1;
+    }
 
 OptRefExpr:
     ExprChain
@@ -313,7 +327,48 @@ FuncType:
     }
   | T_FUNC OptArgTypes T_OPT OptType
     {
-        new_FuncType($2, $4, &$$);
+        VarType *type = NULL;
+        new_FuncType($2, $4, &type);
+        new_ErrorType(&$$, type);
+    }
+
+IfBlock:
+    T_IF Statement T_THEN T_NEWLINE T_INDENT Statements T_OUTDENT OptElseBlock
+    {
+        $$ = new_IfBlockNode(&@$, $2, $6, $8);
+    }
+  | T_IF Statement T_THEN OneLineStatements OptElseBlock
+    {
+        $$ = new_IfBlockNode(&@$, $2, $4, $5);
+    }
+
+OptElseBlock:
+    T_NEWLINE
+    {
+        $$ = NULL;
+    }
+  | ElseBlock
+    {
+        $$ = $1;
+    }
+  | T_NEWLINE ElseBlock
+    {
+        $$ = $2;
+    }
+
+ElseBlock:
+    T_ELSE T_NEWLINE T_INDENT Statements T_OUTDENT T_NEWLINE
+    {
+        $$ = $4;
+    }
+  | T_ELSE OneLineStatements T_NEWLINE
+    {
+        $$ = $2;
+    }
+  | T_ELSE IfBlock
+    {
+        $$ = new_Vector(0);
+        $$->append($$, $2);
     }
 
 FuncBlock:
@@ -467,7 +522,11 @@ TypeDef:
     }
   | T_IDENT T_OPT
     {
-
+        VarType *type = NULL;
+        new_ObjectType(&type);
+        type->object->id_type = NAME;
+        type->object->name = $1;
+        new_ErrorType(&$$, type);
     }
 
 OptArgTypes:

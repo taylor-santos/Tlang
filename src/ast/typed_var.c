@@ -13,7 +13,7 @@ static void free_typed_var(const void *this) {
     const ASTNode   *node = this;
     ASTTypedVarData *data = node->data;
     free(data->name);
-    free_VarType(data->given_type);
+    free_VarType(data->type);
     free(data->loc);
     free(node->data);
     free(node->vtable);
@@ -39,7 +39,7 @@ static void json_typed_var(const void *this, int indent, FILE *out) {
     fprintf(out, "\"%s\",\n", data->name);
     fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
     fprintf(out, "\"given type\": ");
-    json_VarType(data->given_type, indent, out);
+    json_VarType(data->type, indent, out);
     fprintf(out, "\n");
     indent--;
     fprintf(out, "%*s}", indent * JSON_TAB_WIDTH, "");
@@ -56,21 +56,18 @@ static int GetType_TypedVar(const ASTNode *node,
     size_t len = strlen(data->name);
     if (symbols->contains(symbols, data->name, len)) {
         safe_method_call(symbols, get, data->name, len, type_ptr);
-        if (typecmp(*type_ptr, data->given_type, state, symbols, NULL)) {
+        if (typecmp(*type_ptr, data->type, state, symbols, NULL)) {
+            //TODO: handle incompatible type def
+            fprintf(stderr, "error: explicitly typed variable has "
+                            "incompatible type\n");
             return 1;
         }
-        data->type = *type_ptr;
     } else {
-        *type_ptr = data->given_type;
         VarType *type_copy = NULL;
-        safe_function_call(copy_VarType, *type_ptr, &type_copy);
+        safe_function_call(copy_VarType, data->type, &type_copy);
         safe_method_call(symbols, put, data->name, len, type_copy, NULL);
-        data->type = *type_ptr;
     }
-    VarType *type_copy = NULL;
-    safe_function_call(copy_VarType, data->type, &type_copy);
-    char *name = NULL;
-    safe_strdup(&name, data->name);
+    *type_ptr = data->type;
     return 0;
 }
 
@@ -110,8 +107,7 @@ const ASTNode *new_TypedVarNode(struct YYLTYPE *loc,
     }
     memcpy(data->loc, loc, sizeof(*loc));
     data->name          = name;
-    data->given_type    = type;
-    data->type          = NULL;
+    data->type          = type;
     data->is_hold       = 0;
     vtable->free        = free_typed_var;
     vtable->json        = json_typed_var;

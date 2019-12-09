@@ -73,27 +73,28 @@ static int GetType_Function(const ASTNode *node,
     for (size_t i = 0; i < num_args; i++) {
         NamedType *arg = NULL;
         safe_method_call(signature->named_args, get, i, &arg);
-        ClassType *class = NULL;
-        if (arg->type->type != OBJECT ||
-            getObjectClass(arg->type->object,
-                           symbols,
-                           program_data->class_types,
-                           &class)) {
-            //TODO: Handle invalid argument type
-            fprintf(stderr,
-                    "error: \"%s\" invalid argument type\n",
-                    arg->name);
-            return 1;
+        if (arg->type->type == OBJECT) {
+            ClassType *class = NULL;
+            if (getObjectClass(arg->type->object,
+                               symbols,
+                               program_data->class_types,
+                               &class)) {
+                //TODO: Handle invalid argument type
+                fprintf(stderr,
+                        "error: \"%s\" invalid argument type\n",
+                        arg->name);
+                return 1;
+            }
+            free_VarType(arg->type);
+            arg->type = class->instance;
         }
-        free_VarType(arg->type);
-        arg->type = class->instance;
         size_t arg_len = strlen(arg->name);
         VarType *prev_type = NULL;
         safe_method_call(data->symbols,
                          put,
                          arg->name,
                          arg_len,
-                         class->instance,
+                         arg->type,
                          &prev_type);
         if (prev_type != NULL) {
             //TODO: Handle argument type conflict with outer scope variable
@@ -119,7 +120,7 @@ static int GetType_Function(const ASTNode *node,
         ASTClassData *super_data = state->curr_class->data;
         VarType *super_type = NULL;
         safe_function_call(copy_VarType,
-                           super_data->type->class->instance,
+                           super_data->type,
                            &super_type);
         super_type->is_ref = 0;
         VarType *prev_super = NULL;

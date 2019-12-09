@@ -60,6 +60,10 @@ const ASTNode *new_FunctionNode(struct YYLTYPE *loc,
                                 struct VarType *signature,
                                 const Vector *stmts);
 const ASTNode *new_HoldNode(struct YYLTYPE *loc);
+const ASTNode *new_IfBlockNode(struct YYLTYPE *loc,
+                               const ASTNode *cond,
+                               const Vector *stmts,
+                               const Vector *elseStmts);
 const ASTNode *new_IntNode(struct YYLTYPE *loc, int val);
 const ASTNode *new_ParenNode(struct YYLTYPE *loc, const ASTNode *val);
 const ASTNode *new_ProgramNode(struct YYLTYPE *loc, const Vector *statements);

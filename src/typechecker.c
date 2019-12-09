@@ -60,6 +60,7 @@ void free_VarType(void *this) {
             break;
         case REFERENCE:
         case PAREN:
+        case ERROR:
             free_VarType(type->sub_type);
             break;
         case HOLD:
@@ -104,6 +105,20 @@ int new_RefType(VarType **vartype_ptr, VarType *sub_type) {
     (*vartype_ptr)->sub_type = sub_type;
     (*vartype_ptr)->is_ref = 0;
     sub_type->is_ref = 1;
+    return 0;
+}
+
+int new_ErrorType(VarType **vartype_ptr, VarType *sub_type) {
+    if (vartype_ptr == NULL) {
+        return 1;
+    }
+    *vartype_ptr = malloc(sizeof(**vartype_ptr));
+    if (*vartype_ptr == NULL) {
+        return 1;
+    }
+    (*vartype_ptr)->type = ERROR;
+    (*vartype_ptr)->sub_type = sub_type;
+    (*vartype_ptr)->is_ref = 0;
     return 0;
 }
 
@@ -275,6 +290,10 @@ void print_VarType(const void *this) {
                 break;
             case REFERENCE:
                 printf("ref ");
+                print_VarType(type->sub_type);
+                break;
+            case ERROR:
+                printf("errorable ");
                 print_VarType(type->sub_type);
                 break;
             case HOLD:
@@ -561,7 +580,10 @@ int typecmp(const VarType *type1,
     //Returns 1 if the types differ, 0 if they match
     int delSeen, ret;
     if (type1 == NULL || type2 == NULL) {
-        return type1 != type2;
+        return 1;
+    }
+    if (type2->type == ERROR) {
+        type2 = type2->sub_type;
     }
     if (type1->type != type2->type) {
         return 1;

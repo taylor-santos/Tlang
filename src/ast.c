@@ -69,6 +69,13 @@ void json_VarType(const void *this, int indent, FILE *out) {
                 json_VarType(type->sub_type, indent, out);
                 fprintf(out, "\n");
                 break;
+            case ERROR:
+                fprintf(out, "\"optional\",\n");
+                fprintf(out, "%*s", indent * JSON_TAB_WIDTH, "");
+                fprintf(out, "\"ref_type\": ");
+                json_VarType(type->sub_type, indent, out);
+                fprintf(out, "\n");
+                break;
             case TRAIT:
                 fprintf(out, "\"trait\"\n");
                 break;

@@ -93,7 +93,6 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
         *lval = t->value;
         *loc  = t->loc;
         free(t);
-        /*
         switch(*type) {
             case T_NEWLINE:
                 printf("NEWLINE\n");
@@ -125,11 +124,20 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
             case T_CLASS:
                 printf("CLASS\n");
                 return 1;
-            case T_CLASS:
+            case T_TRAIT:
                 printf("TRAIT\n");
                 return 1;
             case T_ERROR:
                 printf("ERROR\n");
+                return 1;
+            case T_IF:
+                printf("IF\n");
+                return 1;
+            case T_THEN:
+                printf("THEN\n");
+                return 1;
+            case T_ELSE:
+                printf("ELSE\n");
                 return 1;
             case T_INT:
                 printf("INT     (%d)\n", lval->int_val);
@@ -148,7 +156,6 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
                 return 1;
         }
         printf("LITERAL (%c)\n", *type);
-        */
         return 1;
     }
     return 0;
@@ -279,6 +286,9 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
     ref    { push_token((Token){.type=T_REF});    }
     class  { push_token((Token){.type=T_CLASS});  }
     trait  { push_token((Token){.type=T_TRAIT});  }
+    if     { push_token((Token){.type=T_IF});     }
+    then   { push_token((Token){.type=T_THEN});   }
+    else   { push_token((Token){.type=T_ELSE});   }
     ->     { push_token((Token){.type=T_ARROW});  }
     :=     { push_token((Token){.type=T_DEFINE}); }
     !      { push_token((Token){.type=T_HOLD});   }
@@ -306,7 +316,7 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
     }
 
     [ \t]+ // Ignore non-leading whitespace
-    [\~\!\%\^\*\/\+\-\=\|\&]+ {
+    [\~\!\%\^\*\/\+\-\=\|\&.]+ {
         char *val;
         safe_asprintf(&val, "0x%X", yytext[0]);
         for (int i = 1; yytext[i] != '\0'; i++) {
