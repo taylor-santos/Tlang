@@ -134,7 +134,6 @@ static int GetType_Def(const ASTNode *node,
         ASTLExprData *lhs_data = lhs_node->data;
         VarType *expected_type = *type_ptr;
         VarType *type_copy = NULL;
-        safe_function_call(copy_VarType, expected_type, &type_copy);
         if (lhs_data->type != NULL &&
             typecmp(expected_type, lhs_data->type, state, symbols, NULL)) {
             //TODO: Handle def to incompatible type
@@ -143,21 +142,28 @@ static int GetType_Def(const ASTNode *node,
             return 1;
         }
         VarType *prev_type = NULL;
-        safe_method_call(symbols,
-                         put,
-                         lhs_data->name,
-                         strlen(lhs_data->name),
-                         type_copy,
-                         &prev_type);
-
-        if (prev_type != NULL &&
-            typecmp(expected_type, prev_type, state, symbols, NULL)) {
-            //TODO: Handle def to incompatible type
-            fprintf(stderr,
-                    "error: assignment to incompatible type\n");
-            return 1;
+        if (!symbols->get(symbols,
+                          lhs_data->name,
+                          strlen(lhs_data->name),
+                          &prev_type)) {
+            if (typecmp(prev_type, expected_type, state, symbols, NULL)) {
+                //TODO: Handle def to incompatible type
+                fprintf(stderr,
+                        "error: assignment to incompatible type\n");
+                return 1;
+            }
+            safe_function_call(copy_VarType, prev_type, &type_copy);
+        } else {
+            safe_function_call(copy_VarType, expected_type, &type_copy);
+            safe_method_call(symbols,
+                             put,
+                             lhs_data->name,
+                             strlen(lhs_data->name),
+                             type_copy,
+                             NULL);
         }
         lhs_data->type = type_copy;
+        *type_ptr = type_copy;
         if (state->curr_class != NULL) {
             ASTClassData *class = state->curr_class->data;
             safe_function_call(copy_VarType, expected_type, &type_copy);
@@ -204,7 +210,7 @@ static char *CodeGen_Def(const ASTNode *node, CodegenState *state, FILE *out) {
         char *lhs_code = lhs_vtable->codegen(lhs, state, out);
         print_indent(state->indent, out);
         ASTLExprData *lhs_data = lhs->data;
-        if (lhs_data->type->is_ref) {
+        if (lhs_data->type->type == REFERENCE) {
             fprintf(out, "*");
         }
         fprintf(out, "%s = %s;\n", lhs_code, rhs_code);

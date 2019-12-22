@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 #include "ast.h"
 #include "typechecker.h"
 #include "safe.h"
@@ -120,8 +121,7 @@ static int parse_object(const Vector *exprs,
     expr->expr_type = EXPR_FIELD;
     expr->sub_expr = *expr_ptr;
     expr->name = name;
-    expr->type = malloc(sizeof(*expr->type));
-    expr->type->class = class;
+    safe_function_call(copy_VarType, *vartype_ptr, &expr->type);
     safe_method_call(exprs, get, *index-1, &expr->node);
 
     *expr_ptr = expr;
@@ -355,10 +355,26 @@ static int parse_expression(const Vector *exprs,
     switch((*vartype_ptr)->type) {
         case HOLD:
         case TUPLE:
-        case REFERENCE:
             if (exprs->size(exprs) > *index) {
                 //TODO: Handle dangling expression
                 fprintf(stderr, "error: dangling expression\n");
+                return 1;
+            }
+            return 0;
+        case REFERENCE:
+            (*vartype_ptr) = (*vartype_ptr)->sub_type;
+            if (parse_expression(exprs,
+                                 index,
+                                 symbols,
+                                 state,
+                                 expr_ptr,
+                                 vartype_ptr)) {
+                return 1;
+            }
+            if (exprs->size(exprs) > *index) {
+                //TODO: Handle dangling expression
+                fprintf(stderr, "error: dangling expression after "
+                                "reference\n");
                 return 1;
             }
             return 0;
@@ -480,9 +496,13 @@ char *gen_expression(Expression *expr, CodegenState *state, FILE *out) {
             sub_expr = gen_expression(expr->sub_expr, state, out);
             print_indent(state->indent, out);
             fprintf(out,
-                    "void *%s = ((class%d*)%s)->field_%s;\n",
+                    "void *%s = ((class%d*)",
                     tmp,
-                    expr->type->class->classID,
+                    expr->sub_expr->type->object->classID);
+            if (expr->sub_expr->type->type == REFERENCE) {
+                fprintf(out, "*");
+            }
+            fprintf(out, "%s)->field_%s;\n",
                     sub_expr,
                     expr->name);
             return tmp;
@@ -500,12 +520,49 @@ char *gen_expression(Expression *expr, CodegenState *state, FILE *out) {
             }
             char *func = gen_expression(expr->sub_expr, state, out);
             asprintf(&tmp, "tmp%d", state->tmp_count++);
-            print_indent(state->indent, out);
-            fprintf(out, "void *%s = call(%s", tmp, func);
             if (expr->arg != NULL) {
-                fprintf(out, ", %s", arg);
+                NamedType *expected_type = NULL;
+                FuncType *fn = expr->sub_expr->type->function;
+                if (expr->arg->type->type == TUPLE) {
+                    size_t arg_count = expr->arg->type->tuple->size(
+                            expr->arg->type->tuple);
+                    for (size_t i = 0; i < arg_count; i++) {
+                        VarType *given_type = NULL;
+                        safe_method_call(expr->arg->type->tuple,
+                                         get,
+                                         i,
+                                         &given_type);
+                        safe_method_call(fn->named_args,
+                                         get,
+                                         i,
+                                         &expected_type);
+                        if (given_type->is_ref != 0u &&
+                            expected_type->type->type != REFERENCE) {
+                            print_indent(state->indent, out);
+                            fprintf(out,
+                                    "((void**)%s)[%ld] = *((void***)%s)[%ld];"
+                                    "\n",
+                                    arg,
+                                    i,
+                                    arg,
+                                    i);
+                        }
+                    }
+                    print_indent(state->indent, out);
+                    fprintf(out, "void *%s = call(%s, %s);\n", tmp, func, arg);
+                } else {
+                    print_indent(state->indent, out);
+                    fprintf(out, "void *%s = call(%s, ", tmp, func);
+                    safe_method_call(fn->named_args, get, 0, &expected_type);
+                    if (expr->arg->type->type == REFERENCE &&
+                        expected_type->type->type != REFERENCE) {
+                        fprintf(out, "*");
+                    }
+                    fprintf(out, "%s);\n", arg);
+                }
+            } else {
+                fprintf(out, "void *%s = call(%s);\n", tmp, func);
             }
-            fprintf(out, ");\n");
             return tmp;
         case EXPR_PAREN:
         case EXPR_HOLD:

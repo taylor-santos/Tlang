@@ -316,7 +316,7 @@ int pop_token_queue(YYSTYPE *lval, enum yytokentype *type, YYLTYPE *loc) {
     }
 
     [ \t]+ // Ignore non-leading whitespace
-    [\~\!\%\^\*\/\+\-\=\|\&.]+ {
+    [\~\!\%\^\*\/\+\-\=\|\&.\>\<]+ {
         char *val;
         safe_asprintf(&val, "0x%X", yytext[0]);
         for (int i = 1; yytext[i] != '\0'; i++) {

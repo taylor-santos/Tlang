@@ -98,7 +98,9 @@ static int GetType_Function(const ASTNode *node,
                          &prev_type);
         if (prev_type != NULL) {
             //TODO: Handle argument type conflict with outer scope variable
-            fprintf(stderr, "warning: possible type conflict\n");
+            fprintf(stderr,
+                    "warning: %s shadows local variable\n",
+                    arg->name);
             free_VarType(prev_type);
         }
         safe_method_call(data->args, put, arg->name, arg_len, NULL, NULL);

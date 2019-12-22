@@ -16,6 +16,7 @@ static void include_headers(FILE *out) {
     fprintf(out, "#include <stdlib.h>\n");
     fprintf(out, "#include <stdio.h>\n");
     fprintf(out, "#include <string.h>\n");
+    fprintf(out, "#include <ctype.h>\n");
     fprintf(out, "\n");
 }
 
@@ -81,116 +82,126 @@ static void define_builtins(FILE *out) {
     fprintf(out, "\n");
     for (size_t i = 0; i < BUILTIN_COUNT; i++) {
         if (i != STRING) {
-            fprintf(out, "void *class%ld_0x%X(closure *c, class%ld *other) "
-                         "{\n", i, '=', i);
+            const Binop *curr = BINARY_OPS[i];
+            while (curr->operation != 0) {
+                fprintf(out, "void *class%ld_0x", i);
+                const char *c = curr->operation;
+                do {
+                    fprintf(out, "%X", *c);
+                } while (*(++c));
+                fprintf(out, "(closure *c, class%ld *other){\n", i);
+                print_indent(1, out);
+                fprintf(out, "#define var_self ((class%ld*)c->env[0])\n", i);
+                print_indent(1, out);
+                fprintf(out,
+                        "class%d *ret = new_class%d(NULL);\n",
+                        curr->ret_type,
+                        curr->ret_type);
+                print_indent(1, out);
+                fprintf(out, "ret->val = var_self->val %s other->val;\n",
+                        curr->operation);
+                print_indent(1, out);
+                fprintf(out, "return ret;\n");
+                fprintf(out, "}\n");
+                curr++;
+            }
+        } else { /* i == STRING */
+            const Binop *curr = BINARY_OPS[i];
+            int op_index = 0;
+            while (curr->operation != 0) {
+                fprintf(out, "void *class%ld_0x", i);
+                const char *c = curr->operation;
+                do {
+                    fprintf(out, "%X", *c);
+                } while (*(++c));
+                fprintf(out, "(closure *c, class%ld *other){\n", i);
+                print_indent(1, out);
+                fprintf(out, "#define var_self ((class%ld*)c->env[0])\n", i);
+                print_indent(1, out);
+                fprintf(out,
+                        "class%d *ret = new_class%d(NULL);\n",
+                        curr->ret_type,
+                        curr->ret_type);
+                print_indent(1, out);
+                switch((STRING_OPS)op_index) {
+                    case ASSIGN:
+                        fprintf(out, "var_self->val = strdup(other->val);\n");
+                        break;
+                    case PLUS:
+                        fprintf(out, "int size = snprintf(NULL, 0, \"%%s%%s\","
+                                     " var_self->val, other->val);\n");
+                        print_indent(1, out);
+                        fprintf(out, "ret->val = malloc(size + 1);\n");
+                        print_indent(1, out);
+                        fprintf(out, "sprintf(ret->val, \"%%s%%s\", "
+                                     "var_self->val, other->val);\n");
+                        break;
+                    case PLUSASSIGN:
+                        fprintf(out, "int size = snprintf(NULL, 0, \"%%s%%s\","
+                                     " var_self->val, other->val);\n");
+                        print_indent(1, out);
+                        fprintf(out, "ret->val = malloc(size + 1);\n");
+                        print_indent(1, out);
+                        fprintf(out, "sprintf(ret->val, \"%%s%%s\", "
+                                     "var_self->val, other->val);\n");
+                        print_indent(1, out);
+                        fprintf(out, "var_self->val = ret->val;\n");
+                        break;
+                    case EQUALS:
+                        fprintf(out, "ret->val = !strcmp(var_self->val, "
+                                     "other->val);\n");
+                        break;
+                    case NOTEQUALS:
+                        fprintf(out, "ret->val = !!strcmp(var_self->val, "
+                                     "other->val);\n");
+                        break;
+                    case LESS:
+                        fprintf(out, "ret->val = strcasecmp(var_self->val, "
+                                     "other->val) < 0;\n");
+                        break;
+                    case ATMOST:
+                        fprintf(out, "ret->val = strcasecmp(var_self->val, "
+                                     "other->val) <= 0;\n");
+                        break;
+                    case MORE:
+                        fprintf(out, "ret->val = strcasecmp(var_self->val, "
+                                     "other->val) > 0;\n");
+                        break;
+                    case ATLEAST:
+                        fprintf(out, "ret->val = strcasecmp(var_self->val, "
+                                     "other->val) >= 0;\n");
+                        break;
+
+                }
+                print_indent(1, out);
+                fprintf(out, "return ret;\n");
+                fprintf(out, "}\n");
+                curr++;
+                op_index++;
+            }
+            fprintf(out, "void *class%ld_toLower(closure *c) {\n", i);
             print_indent(1, out);
             fprintf(out,
                     "#define var_self ((class%ld*)c->env[0])\n",
                     i);
             print_indent(1, out);
-            fprintf(out, "var_self->val = other->val;\n");
+            fprintf(out,
+                    "class%d *str = new_class%d(NULL);\n",
+                    STRING,
+                    STRING);
             print_indent(1, out);
-            fprintf(out, "return var_self;\n");
+            fprintf(out, "str->val = malloc(strlen(var_self->val) + 1);\n");
             print_indent(1, out);
-            fprintf(out, "#undef var_self\n");
+            fprintf(out, "char *s = str->val;\n");
+            print_indent(1, out);
+            fprintf(out, "for (char *t = var_self->val; *t; t++) {\n");
+            print_indent(2, out);
+            fprintf(out, "*(s++) = (char)tolower((int)*t);\n");
+            print_indent(1, out);
             fprintf(out, "}\n");
-            if (i != BOOL) {
-                for (size_t j = 0; j < BINARY_COUNT; j++) {
-                    fprintf(out, "void *class%ld_0x", i);
-                    const char *c = BINARIES[j];
-                    do {
-                        fprintf(out, "%X", *c);
-                    } while (*(++c));
-                    fprintf(out, "(closure *c, class%ld *other) {\n", i);
-                    print_indent(1, out);
-                    fprintf(out,
-                            "#define var_self ((class%ld*)c->env[0])\n",
-                            i);
-                    print_indent(1, out);
-                    fprintf(out,
-                            "class%ld *ret = new_class%ld(NULL);\n",
-                            i,
-                            i);
-                    print_indent(1, out);
-                    fprintf(out,
-                            "ret->val = var_self->val %s other->val;\n",
-                            BINARIES[j]);
-                    print_indent(1, out);
-                    fprintf(out, "return ret;\n");
-                    print_indent(1, out);
-                    fprintf(out, "#undef var_self\n");
-                    fprintf(out, "}\n");
-                }
-            } else { // i == BOOL
-                for (size_t j = 0; j < BOOL_BINARY_COUNT; j++) {
-                    fprintf(out, "void *class%ld_0x", i);
-                    const char *c = BOOL_BINARIES[j];
-                    do {
-                        fprintf(out, "%X", *c);
-                    } while (*(++c));
-                    fprintf(out, "(closure *c, class%ld *other) {\n", i);
-                    print_indent(1, out);
-                    fprintf(out,
-                            "#define var_self ((class%ld*)c->env[0])\n",
-                            i);
-                    print_indent(1, out);
-                    fprintf(out, "class%ld *ret = new_class%ld(NULL);\n", i, i);
-                    print_indent(1, out);
-                    fprintf(out,
-                            "ret->val = var_self->val %s other->val;\n",
-                            BOOL_BINARIES[j]);
-                    print_indent(1, out);
-                    fprintf(out, "return ret;\n");
-                    print_indent(1, out);
-                    fprintf(out, "#undef var_self\n");
-                    fprintf(out, "}\n");
-                }
-            }
-        } else { // i == STRING
-            {
-                fprintf(out, "void *class%ld_0x", i);
-                fprintf(out, "%X", '=');
-                fprintf(out, "(closure *c, class%ld *other) {\n", i);
-                print_indent(1, out);
-                fprintf(out,
-                        "#define var_self ((class%ld*)c->env[0])\n",
-                        i);
-                print_indent(1, out);
-                fprintf(out, "var_self->val = strdup(other->val);\n");
-                print_indent(1, out);
-                fprintf(out, "return var_self;\n");
-                print_indent(1, out);
-                fprintf(out, "#undef var_self\n");
-                fprintf(out, "}\n");
-            }
-            {
-                fprintf(out, "void *class%ld_0x", i);
-                fprintf(out, "%X", '+');
-                fprintf(out, "(closure *c, class%ld *other) {\n", i);
-                print_indent(1, out);
-                fprintf(out,
-                        "#define var_self ((class%ld*)c->env[0])\n",
-                        i);
-                print_indent(1, out);
-                fprintf(out,
-                        "class%ld *ret = new_class%ld(NULL);\n",
-                        i,
-                        i);
-                print_indent(1, out);
-                fprintf(out,
-                        "int size = snprintf(NULL, 0, \"%%s%%s\", "
-                        "var_self->val, other->val);\n");
-                print_indent(1, out);
-                fprintf(out, "ret->val = malloc(size + 1);\n");
-                print_indent(1, out);
-                fprintf(out, "sprintf(ret->val, \"%%s%%s\", "
-                             " var_self->val, other->val);\n");
-                print_indent(1, out);
-                fprintf(out, "return ret;\n");
-                print_indent(1, out);
-                fprintf(out, "#undef var_self\n");
-                fprintf(out, "}\n");
-            }
+            print_indent(1, out);
+            fprintf(out, "return str;\n");
+            fprintf(out, "}\n");
         }
         fprintf(out, "void *class%ld_toString(closure *c) {\n", i);
         print_indent(1, out);
@@ -319,30 +330,18 @@ static int define_classes(CodegenState *state, FILE *out) {
             fprintf(out, "}\n");
             if (i < BUILTIN_COUNT) {
                 fprintf(out, "void *class%ld_toString(closure *c);\n", i);
-                fprintf(out, "void *class%ld_0x%X(closure *c, class%ld "
-                             "*other);\n", i, '=', i);
-                if (i != BOOL) {
-                    for (size_t j = 0; j < BINARY_COUNT; j++) {
-                        if (i != STRING || j < STRING_BINARY_COUNT) {
-                            fprintf(out, "void *class%ld_0x", i);
-                            const char *c = BINARIES[j];
-                            do {
-                                fprintf(out, "%X", *c);
-                            } while (*(++c));
-                            fprintf(out,
-                                    "(closure *c, class%ld *other);\n",
-                                    i);
-                        }
-                    }
-                } else {
-                    for (size_t j = 0; j < BOOL_BINARY_COUNT; j++) {
-                        fprintf(out, "void *class%ld_0x", i);
-                        const char *c = BOOL_BINARIES[j];
-                        do {
-                            fprintf(out, "%X", *c);
-                        } while (*(++c));
-                        fprintf(out, "(closure *c, class%ld *other);\n", i);
-                    }
+                if (i == STRING) {
+                    fprintf(out, "void *class%ld_toLower(closure *c);\n", i);
+                }
+                const Binop *curr = BINARY_OPS[i];
+                while (curr->operation) {
+                    fprintf(out, "void *class%ld_0x", i);
+                    const char *c = curr->operation;
+                    do {
+                        fprintf(out, "%X", *c);
+                    } while (*(++c));
+                    fprintf(out, "(closure *c, class%ld *other);\n", i);
+                    curr++;
                 }
             }
             fprintf(out,
@@ -378,8 +377,11 @@ static int define_classes(CodegenState *state, FILE *out) {
                             env_index++);
                 }
             }
+            char *tmp;
+            safe_asprintf(&tmp, "tmp%d", state->tmp_count++);
             print_indent(1, out);
-            fprintf(out, "build_closure(var_self, new_class%ld", i);
+            fprintf(out, "build_closure(%s, new_class%ld",
+                    tmp, i);
             const char **symbols = NULL;
             size_t *lengths, symbol_count;
             const Map *class_env = NULL;
@@ -400,6 +402,11 @@ static int define_classes(CodegenState *state, FILE *out) {
             free(lengths);
             free(symbols);
             fprintf(out, ")\n");
+            print_indent(1, out);
+            fprintf(out, "#undef var_self\n");
+            print_indent(1, out);
+            fprintf(out, "#define var_self %s\n", tmp);
+            free(tmp);
             if (i < BUILTIN_COUNT) {
                 print_indent(state->indent, out);
                 fprintf(out, "var_val = var_this;\n");
@@ -432,58 +439,36 @@ static int define_classes(CodegenState *state, FILE *out) {
                         i);
                 print_indent(state->indent, out);
                 fprintf(out, "var_toString = tmp%d;\n", state->tmp_count++);
-                print_indent(state->indent, out);
-                fprintf(out,
-                        "build_closure(tmp%d, class%ld_0x%X, var_this)\n",
-                        state->tmp_count,
-                        i,
-                        '=');
-                print_indent(state->indent, out);
-                fprintf(out, "var_0x%X = tmp%d;\n", '=', state->tmp_count++);
-                if (i != BOOL) {
-                    for (size_t j = 0; j < BINARY_COUNT; j++) {
-                        if (i != STRING || j < STRING_BINARY_COUNT) {
-                            print_indent(state->indent, out);
-                            fprintf(out,
-                                    "build_closure(tmp%d, class%ld_0x",
-                                    state->tmp_count,
-                                    i);
-                            const char *c = BINARIES[j];
-                            do {
-                                fprintf(out, "%X", *c);
-                            } while (*(++c));
-                            fprintf(out, ", var_this)\n");
-                            print_indent(state->indent, out);
-                            fprintf(out, "var_0x");
-                            c = BINARIES[j];
-                            do {
-                                fprintf(out, "%X", *c);
-                            } while (*(++c));
-                            fprintf(out, " = tmp%d;\n", state->tmp_count++);
-                        }
-                    }
-                } else {
-                    for (size_t j = 0; j < BOOL_BINARY_COUNT; j++) {
-                        print_indent(state->indent, out);
-                        fprintf(out,
-                                "build_closure(tmp%d, class%ld_0x",
-                                state->tmp_count,
-                                i);
-                        const char *c = BOOL_BINARIES[j];
-                        do {
-                            fprintf(out, "%X", *c);
-                        } while (*(++c));
-                        fprintf(out, ", var_this)\n");
-                        print_indent(state->indent, out);
-                        fprintf(out, "var_0x");
-                        c = BOOL_BINARIES[j];
-                        do {
-                            fprintf(out, "%X", *c);
-                        } while (*(++c));
-                        fprintf(out, " = tmp%d;\n", state->tmp_count++);
-                    }
+                if (i == STRING) {
+                    print_indent(state->indent, out);
+                    fprintf(out,
+                            "build_closure(tmp%d, class%ld_toLower, var_this)"
+                            "\n",
+                            state->tmp_count,
+                            i);
+                    print_indent(state->indent, out);
+                    fprintf(out, "var_toLower = tmp%d;\n", state->tmp_count++);
                 }
-
+                const Binop *curr = BINARY_OPS[i];
+                while (curr->operation) {
+                    print_indent(state->indent, out);
+                    fprintf(out,
+                            "build_closure(tmp%d, class%ld_0x",
+                            state->tmp_count, i);
+                    const char *c = curr->operation;
+                    do {
+                        fprintf(out, "%X", *c);
+                    } while (*(++c));
+                    fprintf(out, ", var_this)\n");
+                    print_indent(state->indent, out);
+                    fprintf(out, "var_0x");
+                    c = curr->operation;
+                    do {
+                        fprintf(out, "%X", *c);
+                    } while (*(++c));
+                    fprintf(out, " = tmp%d;\n", state->tmp_count++);
+                    curr++;
+                }
                 print_indent(state->indent, out);
                 fprintf(out, "var_this->val = 0;\n");
             }
@@ -498,6 +483,8 @@ static int define_classes(CodegenState *state, FILE *out) {
                         (int) field_lengths[j],
                         fields[j]);
             }
+            print_indent(state->indent, out);
+            fprintf(out, "#undef var_self\n");
             state->indent--;
             fprintf(out, "}\n");
             fprintf(out, "\n");
@@ -650,6 +637,8 @@ static int define_functions(CodegenState *state, FILE *out) {
                             env_index++);
                 }
             }
+            print_indent(1, out);
+            fprintf(out, "#undef var_super\n");
             print_indent(1, out);
             fprintf(out, "#define var_super var_self\n");
             size_t stmt_count = data->stmts->size(data->stmts);

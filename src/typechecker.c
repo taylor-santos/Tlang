@@ -4,6 +4,7 @@
 #include "ast.h"
 #include "safe.h"
 #include "ast/program.h"
+#include "builtins.h"
 
 static int funccmp(const FuncType *type1,
                    const FuncType *type2,
@@ -585,6 +586,16 @@ int typecmp(const VarType *type1,
     if (type2->type == ERROR) {
         type2 = type2->sub_type;
     }
+    if (type2->type == REFERENCE) {
+        if (type1->is_ref) {
+            type2 = type2->sub_type;
+        } else {
+            return 1;
+        }
+    }
+    if (type1->type == REFERENCE) {
+        type1 = type1->sub_type;
+    }
     if (type1->type != type2->type) {
         return 1;
     }
@@ -647,6 +658,20 @@ int typecmp(const VarType *type1,
     return 1;
 }
 
+int is_bool(VarType *type) {
+    //Returns 1 if type is bool, 0 otherwise
+    if (type->type != OBJECT) {
+        return 0;
+    }
+    switch(type->object->id_type) {
+        case ID:
+            return type->object->classID == BOOL;
+        case NAME:
+            return !strcmp(type->object->name, BUILTIN_NAMES[BOOL]);
+    }
+    print_ICE("switch statement fell through");
+}
+
 static int funccmp(const FuncType *type1,
                    const FuncType *type2,
                    TypeCheckState *state,
@@ -671,4 +696,119 @@ static int funccmp(const FuncType *type1,
     }
     return ret ||
            typecmp(type1->ret_type, type2->ret_type, state, symbols, seen);
+}
+
+int typeIntersection(VarType *type1,
+                     VarType *type2,
+                     const Map *symbols,
+                     TypeCheckState *state,
+                     VarType **type_ptr) {
+    if (!typecmp(type1,
+                 type2,
+                 state,
+                 symbols,
+                 NULL) &&
+        !typecmp(type2,
+                 type1,
+                 state,
+                 symbols,
+                 NULL)) {
+        // Are type1 and type2 the same type?
+        safe_function_call(copy_VarType,
+                           type1,
+                           type_ptr);
+        return 0;
+    }
+    if (type1->type == OBJECT &&
+        type2->type == OBJECT) {
+        ClassType *class1 = NULL, *class2 = NULL;
+        ASTProgramData *program_data = state->program_node->data;
+        safe_function_call(getObjectClass,
+                           type1->object,
+                           symbols,
+                           program_data->class_types,
+                           &class1);
+        safe_function_call(getObjectClass,
+                           type2->object,
+                           symbols,
+                           program_data->class_types,
+                           &class2);
+        if (class1->classID == class2->classID) {
+            safe_function_call(copy_VarType,
+                               type1,
+                               type_ptr);
+            return 0;
+        } else if (!typecmp(type1,
+                            type2,
+                            state,
+                            symbols,
+                            NULL)) {
+            // Is type1 a subtype of type2?
+            // Then type2 is the intersection of the two.
+            safe_function_call(copy_VarType,
+                               type2,
+                               type_ptr);
+            return 0;
+        } else if (!typecmp(type2,
+                            type1,
+                            state,
+                            symbols,
+                            NULL)) {
+            // Is type2 a subtype of type1?
+            // Then type1 is the intersection of the two.
+            safe_function_call(copy_VarType,
+                               type1,
+                               type_ptr);
+            return 0;
+        } else {
+            // Neither type is a subtype of the other, find
+            // their intersection manually.
+            ClassType *new_trait = malloc(sizeof(*new_trait));
+            new_trait->is_trait = 1;
+            new_trait->classID = program_data->class_types->size(
+                    program_data->class_types);
+            new_trait->field_name_to_type = new_Map(0, 0);
+            safe_method_call(program_data->class_types,
+                             append,
+                             new_trait);
+            size_t num_fields, *field_lengths = NULL;
+            char **field_names = NULL;
+            safe_method_call(class1->field_name_to_type,
+                             keys,
+                             &num_fields,
+                             &field_lengths,
+                             &field_names);
+            for (size_t j = 0; j < num_fields; j++) {
+                VarType *field_type2 = NULL;
+                if (!class2->field_name_to_type->get(
+                        class2->field_name_to_type,
+                        field_names[j],
+                        field_lengths[j],
+                        &field_type2)) {
+                    VarType *field_type1 = NULL;
+                    safe_method_call(class1->field_name_to_type,
+                                     get,
+                                     field_names[j],
+                                     field_lengths[j],
+                                     &field_type1);
+                    VarType *field_intersection = NULL;
+                    if (!typeIntersection(field_type1, field_type2, symbols,
+                            state, &field_intersection)) {
+                        safe_method_call(new_trait->field_name_to_type,
+                                         put,
+                                         field_names[j],
+                                         field_lengths[j],
+                                         field_intersection,
+                                         NULL);
+                    }
+                }
+
+            }
+            safe_function_call(new_ObjectType, type_ptr);
+            (*type_ptr)->object->id_type = ID;
+            (*type_ptr)->object->classID = new_trait->classID;
+            return 0;
+        }
+    }
+    return 1;
 }
