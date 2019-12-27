@@ -360,7 +360,7 @@ static int define_classes(CodegenState *state, FILE *out) {
             }
             const Map *envs = NULL;
             safe_method_call(state->class_envs, get, i, &envs);
-            const char **env = NULL;
+            char **env = NULL;
             size_t env_count;
             size_t *env_lengths;
             safe_method_call(envs, keys, &env_count, &env_lengths, &env);
@@ -475,7 +475,10 @@ static int define_classes(CodegenState *state, FILE *out) {
             for (size_t j = 0; j < env_count; j++) {
                 print_indent(1, out);
                 fprintf(out, "#undef var_%.*s\n", (int) env_lengths[j], env[j]);
+                free(env[j]);
             }
+            free(env);
+            free(env_lengths);
             for (size_t j = 0; j < field_count; j++) {
                 print_indent(state->indent, out);
                 fprintf(out,
@@ -621,7 +624,7 @@ static int define_functions(CodegenState *state, FILE *out) {
                 free(lengths);
                 free(symbols);
             }
-            const char **env = NULL;
+            char **env = NULL;
             size_t env_count;
             size_t *env_lengths;
             safe_method_call(data->env, keys, &env_count, &env_lengths, &env);
@@ -656,6 +659,7 @@ static int define_functions(CodegenState *state, FILE *out) {
                 fprintf(out, "#undef var_%.*s\n",
                         (int) env_lengths[j],
                         env[j]);
+                free(env[j]);
             }
             free(env_lengths);
             free(env);

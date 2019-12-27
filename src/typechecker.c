@@ -53,8 +53,10 @@ void free_VarType(void *this) {
             free_ObjectType(type->object);
             break;
         case CLASS:
-        case TRAIT:
             free_ClassType(type->class);
+            break;
+        case TRAIT:
+            free_TraitType(type->class);
             break;
         case TUPLE:
             type->tuple->free(type->tuple, free_VarType);
@@ -77,13 +79,28 @@ void free_FuncType(void *this) {
     free(this);
 }
 
-void free_ClassType(void *this) {
+void free_TraitType(void *this) {
     ClassType *type = this;
     type->field_name_to_type->free(type->field_name_to_type, free_VarType);
     free(this);
 }
 
+void free_ClassType(void *this) {
+    ClassType *type = this;
+    type->field_name_to_type->free(type->field_name_to_type, free_VarType);
+    type->supers->free(type->supers, NULL);
+    free(this);
+}
+
 void free_ObjectType(void *this) {
+    ObjectType *obj = this;
+    switch(obj->id_type) {
+        case ID:
+            break;
+        case NAME:
+            free(obj->name);
+            break;
+    }
     free(this);
 }
 
@@ -369,8 +386,7 @@ int copy_VarType(const void *type, const void *copy_ptr) {
                                        &(*VT_copy_ptr)->class);
             break;
         case REFERENCE:
-        case HOLD:
-        case PAREN: safe_function_call(copy_VarType,
+        case HOLD: safe_function_call(copy_VarType,
                                        VT_type->sub_type,
                                        &(*VT_copy_ptr)->sub_type);
             break;
@@ -378,7 +394,8 @@ int copy_VarType(const void *type, const void *copy_ptr) {
                                      copy,
                                      &(*VT_copy_ptr)->tuple, copy_VarType);
             break;
-
+        case PAREN:
+            break;
     }
     return 0;
 }
@@ -485,8 +502,10 @@ int classcmp(ClassType *type1,
         return 0;
     }
     size_t ID1 = type1->classID, ID2 = type2->classID;
+    int free_seen = 0;
     if (seen == NULL) {
         seen = new_Map(0, 0);
+        free_seen = 1;
     } else {
         if (seen->contains(seen, &ID1, sizeof(ID1)) ||
             seen->contains(seen, &ID2, sizeof(ID2))) {
@@ -499,18 +518,18 @@ int classcmp(ClassType *type1,
     size_t *field_lengths = NULL;
     char **fields = NULL;
     safe_method_call(type2->field_name_to_type,
-            keys,
-            &field_count,
-            &field_lengths,
-            &fields);
+                     keys,
+                     &field_count,
+                     &field_lengths,
+                     &fields);
     int valid = 1;
     size_t i;
     for (i = 0; i < field_count; i++) {
         VarType *given_type = NULL;
         if (type1->field_name_to_type->get(type1->field_name_to_type,
-                fields[i],
-                field_lengths[i],
-                &given_type)) {
+                                           fields[i],
+                                           field_lengths[i],
+                                           &given_type)) {
                 valid = 0;
                 break;
         }
@@ -531,6 +550,9 @@ int classcmp(ClassType *type1,
     }
     free(field_lengths);
     free(fields);
+    if (free_seen) {
+        seen->free(seen, NULL);
+    }
     return !valid;
 }
 

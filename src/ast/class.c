@@ -17,9 +17,10 @@ static void free_class(const void *this) {
     ASTClassData  *data = node->data;
     free_VarType(data->type);
     data->supers->free(data->supers, free);
-    data->stmts->free(data->stmts, free_ASTNode);
+    data->stmts->free(data->stmts, NULL);
     data->symbols->free(data->symbols, free_VarType);
     data->fields->free(data->fields, NULL);
+    data->env->free(data->env, NULL);
     free(data->loc);
     free(node->data);
     free(node->vtable);
@@ -78,7 +79,9 @@ static int GetType_Class(const ASTNode *node,
     // Update program data with new class information
     safe_method_call(program_data->class_types, append, data->type->class);
     safe_method_call(program_data->class_stmts, append, data->stmts);
-    safe_method_call(program_data->class_envs,  append, data->env);
+    const Map *env_copy = NULL;
+    safe_method_call(data->env, copy, &env_copy, NULL);
+    safe_method_call(program_data->class_envs,  append, env_copy);
 
     // Add "self" object to class's symbol table
     {
@@ -137,7 +140,6 @@ static int GetType_Class(const ASTNode *node,
 
     // Iterate through parent classes, collecting their fields
     size_t super_count = data->supers->size(data->supers);
-    data->type->class->supers = new_Vector(0); // Vector of class IDs
     for (size_t i = 0; i < super_count; i++) {
         char *super_name = NULL;
         safe_method_call(data->supers, get, i, &super_name);
@@ -287,7 +289,7 @@ const ASTNode *new_ClassNode(struct YYLTYPE *loc,
     data->supers      = supers;
     data->stmts       = stmts;
     data->fields      = new_Map(0, 0);
-    data->env         = new_Map(0, 0);
+    data->env         = NULL;
     data->type        = NULL;
     data->symbols     = NULL;
     data->name        = NULL;

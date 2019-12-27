@@ -22,6 +22,8 @@ struct expr_node {
     struct VarType *type;
 };
 
+void free_Expression(void*);
+
 void json_ASTNode(const void *this, int indent, FILE *out);
 void json_vector(const Vector *vec, int indent, FILE *out,
         void(*element_json)(const void *, int, FILE *));

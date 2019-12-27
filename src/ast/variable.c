@@ -52,7 +52,7 @@ static int GetType_Variable(const ASTNode *node,
     VarType *type = NULL;
     if (!symbols->get(symbols, data->name, len, &type)) {
         *type_ptr = type;
-        safe_function_call(copy_VarType, type, &data->type);
+        data->type = type;
         return 0;
     } else {
         //TODO: Handle use before init error

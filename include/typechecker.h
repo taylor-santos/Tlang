@@ -55,7 +55,6 @@ struct ObjectType {
 typedef struct {
     const ASTNode *program_node;
     const ASTNode *curr_class;
-    const Vector *classTypes;  // Vector<ClassType*>
     VarType *curr_ret_type;
 } TypeCheckState;
 
@@ -75,10 +74,17 @@ int getObjectClass(ObjectType *object,
                    const Map *symbols,
                    const Vector *classTypes,
                    ClassType **type_ptr);
+int is_bool(VarType *type);
+int typeIntersection(VarType *type1,
+                     VarType *type2,
+                     const Map *symbols,
+                     TypeCheckState *state,
+                     VarType **type_ptr);
 
 void free_VarType(void*);
 void free_FuncType(void*);
 void free_ClassType(void*);
+void free_TraitType(void*);
 void free_ObjectType(void*);
 void free_NamedType(void*);
 

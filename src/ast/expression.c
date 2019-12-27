@@ -47,7 +47,10 @@ static void free_expression(const void *this) {
     const ASTNode     *node = this;
     ASTExpressionData *data = node->data;
     data->exprs->free(data->exprs, free_ASTNode);
-    //free_Expression(data->expr_node);
+    if (data->expr_node != NULL) {
+        free_Expression(data->expr_node);
+        data->expr_node = NULL;
+    }
     free(data->loc);
     free(node->data);
     free(node->vtable);
@@ -116,11 +119,10 @@ static int parse_object(const Vector *exprs,
                 name);
         return 1;
     }
-    safe_function_call(copy_VarType, *vartype_ptr, &data->type);
     Expression *expr = malloc(sizeof(*expr));
     expr->expr_type = EXPR_FIELD;
     expr->sub_expr = *expr_ptr;
-    expr->name = name;
+    safe_strdup(&expr->name, name);
     safe_function_call(copy_VarType, *vartype_ptr, &expr->type);
     safe_method_call(exprs, get, *index-1, &expr->node);
 
@@ -467,7 +469,9 @@ static int GetType_Expression(const ASTNode *node,
         print_ICE("unable to allocate memory");
     }
     data->expr_node->node = first_node;
-    data->expr_node->type = *type_ptr;
+    VarType *type_copy = NULL;
+    safe_function_call(copy_VarType, *type_ptr, &type_copy);
+    data->expr_node->type = type_copy;
     data->expr_node->expr_type = EXPR_VAR;
     if (parse_expression(exprs,
                          &index,
@@ -563,6 +567,8 @@ char *gen_expression(Expression *expr, CodegenState *state, FILE *out) {
             } else {
                 fprintf(out, "void *%s = call(%s);\n", tmp, func);
             }
+            free(arg);
+            free(func);
             return tmp;
         case EXPR_PAREN:
         case EXPR_HOLD:

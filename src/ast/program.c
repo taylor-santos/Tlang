@@ -9,15 +9,28 @@
 #include "ast/statement.h"
 #include "builtins.h"
 
+static void free_env(void *this) {
+    const Map *map = this;
+    if (map == NULL) return;
+    map->free(map, NULL);
+}
+
 static void free_program(const void *this) {
     if (this == NULL) {
         return;
     }
     const ASTNode  *node = this;
     ASTProgramData *data = node->data;
+    size_t num_classes = data->class_types->size(data->class_types);
+    for (size_t i = 0; i < num_classes; i++) {
+        free(data->fields[i]);
+    }
+    free(data->fields);
     data->statements->free(data->statements, free_ASTNode);
     data->symbols->free(data->symbols, free_VarType);
     data->func_defs->free(data->func_defs, free);
+    data->class_stmts->free(data->class_stmts, NULL);
+    data->class_envs->free(data->class_envs, free_env);
     free(data->loc);
     free(node->data);
     free(node->vtable);
@@ -49,8 +62,6 @@ static void json_program(const void *this, int indent, FILE *out) {
 static int add_builtins(const ASTNode *node) {
     ASTProgramData *data = node->data;
     for (size_t classID = 0; classID < BUILTIN_COUNT; classID++) {
-        char *class_name = NULL;
-        safe_strdup(&class_name, BUILTIN_NAMES[classID]);
         ClassType *class_type = malloc(sizeof(*class_type));
         if (class_type == NULL) {
             print_ICE("unable to allocate memory");
@@ -149,8 +160,8 @@ static int add_builtins(const ASTNode *node) {
         type_copy->is_ref = 0;
         safe_method_call(data->symbols,
                          put,
-                         class_name,
-                         strlen(class_name),
+                         BUILTIN_NAMES[classID],
+                         strlen(BUILTIN_NAMES[classID]),
                          type_copy,
                          NULL);
         safe_method_call(data->class_stmts,
@@ -202,6 +213,7 @@ static int add_builtins(const ASTNode *node) {
         safe_method_call(data->class_envs,
                          append,
                          NULL);
+        free(trait_name);
     }
     {
         VarType *arg_type = NULL;
@@ -237,6 +249,11 @@ static int counterSort(const void *lhs, const void *rhs) {
 static int counterSortRev(const void *lhs, const void *rhs) {
     const counter *l = lhs, *r = rhs;
     return r->count - l->count;
+}
+
+static void free_Vector(void *this) {
+    const Vector *vec = this;
+    vec->free(vec, NULL);
 }
 
 static int TypeCheck_Program(const ASTNode *node) {
@@ -494,7 +511,10 @@ static int TypeCheck_Program(const ASTNode *node) {
                                              (void*)p,
                                              &p);
                         }
+                        free(keys[y]);
                     }
+                    free(keys);
+                    free(key_lens);
                 }
                 size_t untaken = 0;
                 while (taken->contains(taken, &untaken, sizeof(p))) {
@@ -510,9 +530,19 @@ static int TypeCheck_Program(const ASTNode *node) {
                                      (void*)untaken,
                                      &p);
                 }
+                v->free(v, NULL);
             }
         }
     }
+    for (size_t i = 0; i < num_classes; i++) {
+        free(from_size[i]);
+        field_from[i]->free(field_from[i], free_Vector);
+        field_to[i]->free(field_to[i], free_Vector);
+    }
+    free(field_from);
+    free(field_to);
+    free(from_size);
+    free(child_count);
     data->fields = malloc(num_classes * sizeof(*data->fields));
     data->field_counts = malloc(num_classes * sizeof(*data->field_counts));
     for (size_t i = 0; i < num_classes; i++) {

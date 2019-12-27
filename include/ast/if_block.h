@@ -16,6 +16,8 @@ struct ast_if_block_data {
     const ASTNode *cond;
     const Vector *stmts;
     const Vector *elseStmts;
+    const Vector *trueSymbols;
+    const Vector *falseSymbols;
 };
 
 struct ast_if_block_vtable {

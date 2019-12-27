@@ -149,3 +149,29 @@ void json_string(const void *this, UNUSED int indent, FILE *out) {
     const char *str = this;
     fprintf(out, "\"%s\"", str);
 }
+
+void free_Expression(void *this) {
+    Expression *expr = this;
+    switch(expr->expr_type) {
+        case EXPR_VAR:
+            break;
+        case EXPR_FIELD:
+            free_Expression(expr->sub_expr);
+            free(expr->name);
+            break;
+        case EXPR_CONS:
+            free_Expression(expr->sub_expr);
+            break;
+        case EXPR_FUNC:
+            free_Expression(expr->sub_expr);
+            if (expr->arg != NULL)
+                free_Expression(expr->arg);
+            break;
+        case EXPR_PAREN:
+            free_Expression(expr->sub_expr);
+            break;
+        case EXPR_HOLD:
+            free_Expression(expr->sub_expr);
+            break;
+    }
+}
